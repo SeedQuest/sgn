@@ -3,12 +3,6 @@
   my $commit;
   my $updated;
 
-  my $cfg_ver  = eval { $c->config->{footer_version} } || "";
-  my $cfg_date = eval { $c->config->{footer_build_date} } || "";
-  $tag     = $cfg_ver  || $ENV{VERSION}    || $tag;
-  $updated = $cfg_date || $ENV{BUILD_DATE} || $updated;
-
-
   # In most production images .git is not present.
   # Prefer environment variables for stable build info.
     $tag     = $ENV{VERSION}     || "v1.83";

@@ -101,6 +101,8 @@
                                     <select class="form-control" id="drone_image_upload_camera_info" name="drone_image_upload_camera_info">
                                         <option value="">Select One</option>
                                         <option value="micasense_5">Micasense 5 Bands</option>
+                                        <option value="dji_mavic3m">DJI Mavic 3 Multispectral (4 Bands + RGB)</option>
+                                        <option value="multispectral_4band">Multispectral 4 Band Camera</option>
                                         <option value="ccd_color">CCD Sensor Color Image</option>
                                         <option value="cmos_color">CMOS Sensor Color Image</option>
                                         <option value="interpolated_elevation">Interpolated Elevation Image</option>

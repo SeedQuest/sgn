@@ -1,0 +1,58 @@
+<%init>
+  my $tag     = $ENV{VERSION}    || '';
+  my $updated = $ENV{BUILD_DATE} || '';
+</%init>
+
+<!-- BEGIN SITE FOOTER (SeedQuest). -->
+
+<div id="pagefooter" class="navbar navbar-default" style="margin-top:40px;margin-bottom:0px;min-height:auto;">
+  <div class="container-fluid" style="padding: 14px 18px;">
+    <div class="row">
+
+      <div class="col-sm-12 col-md-8" style="margin-bottom:10px;">
+        <div class="sq-footer-brand">
+          <span class="sq-footer-title">SeedQuest</span>
+          <span class="sq-footer-sub">Agricultural analytics & breeding support</span>
+        </div>
+
+        <div class="sq-footer-credits">
+          Built on the open SGN / Breedbase ecosystem.
+          Credits: <a href="https://btiscience.org" target="_new" rel="noopener">Boyce Thompson Institute</a>,
+          <a href="https://solgenomics.net" target="_new" rel="noopener">Sol Genomics Network (SGN)</a>,
+          and collaborating institutions.
+        </div>
+      </div>
+
+      <div class="col-sm-12 col-md-4">
+        <div class="sq-footer-version">
+          <div><strong>Version</strong></div>
+
+          <div class="sq-muted">
+            <span>Base:</span> <% $m->print($tag) %>
+          </div>
+
+          <div class="sq-muted">
+            <span>Build date:</span> <% $m->print($updated) %>
+          </div>
+
+          <div class="sq-muted" style="margin-top:8px;">
+            <a href="https://brapi.org/" target="_new" rel="noopener">BrAPI</a>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<style>
+  .sq-footer-brand { margin-bottom: 6px; }
+  .sq-footer-title { font-weight: 700; font-size: 14px; margin-right: 10px; }
+  .sq-footer-sub { font-size: 12px; color: #666; }
+  .sq-footer-credits { font-size: 12px; color: #777; line-height: 1.4; margin-top: 6px; }
+  .sq-footer-version { padding: 10px 12px; border: 1px solid #eee; border-radius: 8px; background: #fafafa; }
+  .sq-footer-version strong { font-size: 12px; color: #444; }
+  .sq-muted { font-size: 12px; color: #888; line-height: 1.35; margin-top: 4px; }
+</style>
+
+<!-- END SITE FOOTER (SeedQuest). -->

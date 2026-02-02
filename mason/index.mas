@@ -1,45 +1,40 @@
 <%args>
-$schema
-$phenotype_files => undef
-$breeding_programs => undef
-$locations => undef
-$preferred_species => undef
-$editable_stock_props => {}
 </%args>
 
-      <div style="border:0px solid;text-align:center;">
-            <!-- span style="font-face:arial;font-size:48pt;color:darkgreen;font-weight:light;">BREE<b>DB</b>ASE</span -->
-	    <img src="/img/Breedbase_HighRes.png" width="400" />
-      </div>
-
-      <div>
-	<h3>What is Breedbase?</h3>
-	Breedbase is a comprehensive breeding management and analysis software. It can be used to design field layouts, collect phenotypic information using tablets, support the collection of genotyping samples in a field, store large amounts of high density genotypic information, and provide Genomic Selection related analyses and predictions. Breedbase supports the BrAPI standard.
-	<h3>How can I use Breedbase?</h3>
-	Breedbase is a web application that only requires a browser. To get your Breedbase instance, contact the <a href="/contact/form">Breedbase development team</a>.
-	<h3>What crops are using Breedbase?</h3>
-	There are a number of instances running for diverse crops, including Cassava (<a href="https://cassavabase.org/">https://cassavabase.org</a>), sweet potato (<a href="https://sweetpotatobase.org/">https://sweetpotatobase.org</a>), banana (<a href="https://musabase.org/">https://musabase.org</a>), rice (<a href="https://ricebase.org/">https://ricebase.org</a>), tomato and other Solanaceae (<a href="https://solgenomics.net">https://solgenomics.net/</a>) and many others.
-      </div>
-
-      <h3>How can I learn more about Breedbase?</h3>
-
-      You can watch the Breedbase workshops on <a href="https://www.youtube.com/channel/UC3jrvvzGKKEHzOriDBgnj0A">Youtube</a>, covering topics such as ontologies, trial design, data collection using fieldbook, data analysis, and genomic selection. 
-      
-      
-<div class="container-fluid">
-  <div class="row">
-    <div class="col-sm-6 col-md-6 col-lg-6">
-    </div>
-      
-      <div class="col-sm-6 col-md-6 col-lg-6">
-        
-      </div>
-      
+<div class="container" style="max-width: 1100px;">
+  <div style="text-align:center; padding: 25px 0 10px 0;">
+    <img src="/static/img/seedquest_logo.png" style="max-width: 360px; width: 100%; height: auto;" />
   </div>
+
+  <h3>What is SeedQuest?</h3>
+  <p>
+    SeedQuest is a professional digital platform for agricultural analysis,
+    field trials, and breeding support.
+    It is designed for agronomists, breeding teams, and agricultural companies
+    working with data-driven decision-making.
+  </p>
+
+  <p>
+    The platform integrates field experiments, phenotypic observations,
+    yield and quality data, climatic inputs, and agronomic parameters
+    into a structured and auditable workflow.
+  </p>
+
+  <h3>How is SeedQuest used?</h3>
+  <p>
+    SeedQuest is used to design and manage field trials,
+    evaluate crop performance across locations and seasons,
+    and support professional agronomic consulting and breeding programs.
+  </p>
+
+  <h3>What crops are supported?</h3>
+  <p>
+    SeedQuest is actively used for maize, soybean, sunflower, wheat,
+    and other major field crops, with flexible support for custom trial designs
+    and crop-specific ontologies.
+  </p>
+
+  <p style="margin-top: 20px; font-size: 12px; opacity: 0.75;">
+    SeedQuest is built on open scientific tools developed within the Sol Genomics Network (SGN) ecosystem.
+  </p>
 </div>
-
-% if ($phenotype_files) {
-     <& homepage/phenotype_uploads.mas, phenotype_files=>$phenotype_files &>
-% }
-
-<!-- & homepage/github_pullrequests.mas &  -->

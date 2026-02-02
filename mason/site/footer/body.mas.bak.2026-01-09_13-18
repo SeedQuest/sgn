@@ -3,30 +3,22 @@
   my $commit;
   my $updated;
 
-  my $cfg_ver  = eval { $c->config->{footer_version} } || "";
-  my $cfg_date = eval { $c->config->{footer_build_date} } || "";
-  $tag     = $cfg_ver  || $ENV{VERSION}    || $tag;
-  $updated = $cfg_date || $ENV{BUILD_DATE} || $updated;
-
-
   # In most production images .git is not present.
   # Prefer environment variables for stable build info.
     $tag     = $ENV{VERSION}     || "v1.83";
     $updated = $ENV{BUILD_DATE}  || "";
 
   # Optional: if git exists (dev images), show commit/tag/date.
-  my $isGit = (system("git -C . rev-parse 2>/dev/null") == 0);
-  if ($isGit) {
+  system("git -C . rev-parse 2>/dev/null");
+  my $isGit = `echo $?`;
+  if ($isGit == 0) {
     $tag     = `git describe --abbrev=0 --tags 2>/dev/null` || $tag;
     chomp($tag);
     $commit  = `git rev-parse --short HEAD 2>/dev/null`;
     chomp($commit);
+    $updated = `git log -1 --format=%cd 2>/dev/null` || $updated;
+    chomp($updated);
   }
-
-  # Final production override (always from env)
-  $tag     = $ENV{VERSION}    || $tag     || "";
-  $updated = $ENV{BUILD_DATE} || "";
-
 </%init>
 
 <!-- BEGIN SITE FOOTER (SeedQuest). -->

@@ -1,42 +1,44 @@
+<!-- SEEDQUEST SKIN INJECTION FIXED -->
+<link rel="stylesheet" href="/static/css/seedquest_skin_fixed.css?v=99">
+
 <li class="dropdown"><a class="menu_click_dropdown dropdown-toggle" data-toggle="dropdown" href="/breeders/home">Manage</a>
-<!-- <li class="dropdown"><a class="dropdown-toggle" data-toggle="dropdown" href="#">Tools<span class="caret"></span></a> -->
   <ul class="dropdown-menu">
-    <li><a href="/breeders/manage_roles/">User Roles</a></li>
-    <li><a href="/breeders/manage_programs/">Breeding Programs</a></li>
-    <li><a href="/breeders/locations">Locations</a></li>
-    <li><a href="/tools/report/">Report Factory</a></li>
+    <li><a href="/breeders/manage_roles/"><span class="glyphicon glyphicon-user"></span> User Roles</a></li>
+    <li><a href="/breeders/manage_programs/"><span class="glyphicon glyphicon-briefcase"></span> Breeding Programs</a></li>
+    <li><a href="/breeders/locations"><span class="glyphicon glyphicon-map-marker"></span> Locations</a></li>
+    <li><a href="/tools/report/"><span class="glyphicon glyphicon-list-alt"></span> Report Factory</a></li>
 
     <li role="separator" class="divider"></li>
-    <li><a href="/breeders/accessions/">Accessions</a></li>
-    <li><a href="/breeders/seedlots/">Seed Lots</a></li>
-    <li><a href="/breeders/crosses/">Crosses</a></li>
+    <li><a href="/breeders/accessions/"><span class="glyphicon glyphicon-leaf"></span> Accessions</a></li>
+    <li><a href="/breeders/seedlots/"><span class="glyphicon glyphicon-grain"></span> Seed Lots</a></li>
+    <li><a href="/breeders/crosses/"><span class="glyphicon glyphicon-random"></span> Crosses</a></li>
 
     <li role="separator" class="divider"></li>
-    <li><a href="/order/stocks/view">Order Stocks</a></li>
-    <li><a href="/breeders/activities">Tracking Activities</a></li>
-    <li><a href="/breeders/transformations/">Transformations</a></li>
+    <li><a href="/order/stocks/view"><span class="glyphicon glyphicon-shopping-cart"></span> Order Stocks</a></li>
+    <li><a href="/breeders/activities"><span class="glyphicon glyphicon-tasks"></span> Tracking Activities</a></li>
+    <li><a href="/breeders/transformations/"><span class="glyphicon glyphicon-flash"></span> Transformations</a></li>
 
     <li role="separator" class="divider"></li>
-    <li><a href="/breeders/trials/">Field Trials</a></li>
-    <li><a href="/fieldbook">Field Book App</a></li>
-    <li><a href="/breeders/phenotyping/">Phenotyping</a></li>
-    <li><a href="/barcode">Barcodes</a></li>
-    <li><a href="/tools/label_designer">Label Designer</a></li>
+    <li><a href="/breeders/trials/"><span class="glyphicon glyphicon-tree-deciduous"></span> Field Trials</a></li>
+    <li><a href="/fieldbook"><span class="glyphicon glyphicon-phone"></span> Field Book App</a></li>
+    <li><a href="/breeders/phenotyping/"><span class="glyphicon glyphicon-eye-open"></span> Phenotyping</a></li>
+    <li><a href="/barcode"><span class="glyphicon glyphicon-barcode"></span> Barcodes</a></li>
+    <li><a href="/tools/label_designer"><span class="glyphicon glyphicon-tags"></span> Label Designer</a></li>
 
     <li role="separator" class="divider"></li>
-    <li><a href="/breeders/genotyping_projects/">Genotyping Projects</a></li>
-    <li><a href="/breeders/genotyping/">Genotyping Plates</a></li>
-    <li><a href="/breeders/markers/">Marker Allele Lists</a></li>
+    <li><a href="/breeders/genotyping_projects/"><span class="glyphicon glyphicon-folder-open"></span> Genotyping Projects</a></li>
+    <li><a href="/breeders/genotyping/"><span class="glyphicon glyphicon-th-large"></span> Genotyping Plates</a></li>
+    <li><a href="/breeders/markers/"><span class="glyphicon glyphicon-tag"></span> Marker Allele Lists</a></li>
 
     <li role="separator" class="divider"></li>
-    <li><a href="/breeders/download">Download</a></li>
-    <li><a href="/breeders/upload">Upload</a></li>
-    <li><a href="/breeders/identifier_generation">Identifier Generation</a></li>
-<!--    <li><a href="/breeders/odk">ODK Data Collection</a></li>  -->
-    <li><a href="/breeders/file_share_dump">File Share</a></li>
+    <li><a href="/breeders/download"><span class="glyphicon glyphicon-download"></span> Download</a></li>
+    <li><a href="/breeders/upload"><span class="glyphicon glyphicon-upload"></span> Upload</a></li>
+    <li><a href="/breeders/identifier_generation"><span class="glyphicon glyphicon-plus-sign"></span> Identifier Generation</a></li>
+    <li><a href="/breeders/file_share_dump"><span class="glyphicon glyphicon-folder-close"></span> File Share</a></li>
 
     <li role="seperator" class="divider"></li>
-    <li><a href="/breeders/nirs">NIRS</a></li>
-    <li><a href="/breeders/transcriptomics">Transcriptomics</a></li>
+    <li><a href="/breeders/drone_imagery"><span class="glyphicon glyphicon-camera"></span> Drone Imagery</a></li>
+    <li><a href="/breeders/nirs"><span class="glyphicon glyphicon-signal"></span> NIRS</a></li>
+    <li><a href="/breeders/transcriptomics"><span class="glyphicon glyphicon-align-left"></span> Transcriptomics</a></li>
   </ul>
 </li>

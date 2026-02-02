@@ -3,12 +3,6 @@
   my $commit;
   my $updated;
 
-  my $cfg_ver  = eval { $c->config->{footer_version} } || "";
-  my $cfg_date = eval { $c->config->{footer_build_date} } || "";
-  $tag     = $cfg_ver  || $ENV{VERSION}    || $tag;
-  $updated = $cfg_date || $ENV{BUILD_DATE} || $updated;
-
-
   # In most production images .git is not present.
   # Prefer environment variables for stable build info.
     $tag     = $ENV{VERSION}     || "v1.83";
@@ -69,7 +63,7 @@
             <span>Base:</span> <% $tag %>
           </div>
           <div class="sq-muted">
-            <span>Build date:</span> <% $updated %>
+            <span>Build date:</span> <% $updated %> [ENV:<% $ENV{BUILD_DATE} %>]
           </div>
           <div class="sq-muted" style="margin-top:8px;">
             <a href="https://brapi.org/" target="_new" rel="noopener">BrAPI</a>
