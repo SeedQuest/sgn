@@ -28,6 +28,7 @@ use JSON;
 use List::Util qw/any uniq all/;
 use List::MoreUtils qw/firstidx/;
 use Scalar::Util qw /weaken reftype looks_like_number/;
+use SGN::Model::Cvterm;
 use Storable qw/nstore retrieve/;
 use URI::FromHash 'uri';
 
@@ -304,6 +305,10 @@ sub prepare_response {
         $c->stash->{rest}{anova_model_file}       = $model_file;
         $c->stash->{rest}{adj_means_file}         = $means_file;
         $c->stash->{rest}{anova_diagnostics_file} = $diagnostics_file;
+
+        # Read persisted outlier count from the count file
+        my $outliers = $self->_read_outlier_count_file($c);
+        $c->stash->{rest}{outliers_excluded} = $outliers;
     }
     else {
         $self->anova_error_file($c);
@@ -473,7 +478,32 @@ sub anova_input_files {
     my $trial_id = $c->stash->{trial_id};
     my $trait_id = $c->stash->{trait_id};
 
-    my $pheno_file = $self->trial_phenotype_file($c);
+    # Copy the shared phenotype file to the ANOVA cache dir, then
+    # filter outliers from the copy — so other solGS tools keep the
+    # original unfiltered file.
+    my $shared_pheno_file = $self->trial_phenotype_file($c);
+    my $anova_cache       = $c->stash->{anova_cache_dir};
+    my $pheno_file        = $shared_pheno_file;
+
+    if (-s $shared_pheno_file && $anova_cache) {
+        my $filtered_name = "phenotype_data_filtered_${trial_id}.tsv";
+        my $filtered_path = catfile($anova_cache, $filtered_name);
+
+        copy($shared_pheno_file, $filtered_path)
+            or croak "anova: cannot copy phenotype file: $!";
+
+        my $excluded = $self->_filter_outliers_from_phenofile(
+            $c, $filtered_path
+        );
+
+        # Persist outlier count so prepare_response can read it
+        # across separate HTTP requests
+        if ($excluded > 0) {
+            $self->_write_outlier_count_file($c, $excluded);
+        }
+
+        $pheno_file = $filtered_path;
+    }
 
     $self->anova_traits_file($c);
     my $traits_file = $c->stash->{anova_traits_file};
@@ -636,6 +666,146 @@ sub adj_means_file {
 
     $c->controller('solGS::Files')->cache_file( $c, $cache_data );
 
+}
+
+# Replace outlier-marked phenotype values with NA in the phenotype
+# data file.  This keeps the row structure intact (blocks, reps) so
+# the mixed-model ANOVA handles missing data gracefully.
+sub _filter_outliers_from_phenofile {
+    my ( $self, $c, $pheno_file ) = @_;
+
+    return 0 unless $pheno_file && -s $pheno_file;
+
+    my $trial_id = $c->stash->{trial_id};
+    my $schema   = $self->schema($c);
+
+    # Resolve the cvterm_id for the outlier property type
+    my $outlier_type_id = SGN::Model::Cvterm
+        ->get_cvterm_row($schema, 'phenotype_outlier', 'phenotype_property')
+        ->cvterm_id();
+
+    # Find all (observationunit_uniquename, trait_name) pairs that are
+    # marked as outliers for this trial.  The query traverses:
+    #   phenotypeprop -> phenotype -> nd_experiment_phenotype
+    #     -> nd_experiment_stock -> stock (observationunit)
+    #   phenotype -> cvterm (trait)
+    my $dbh = $schema->storage->dbh();
+    my $sth = $dbh->prepare(qq{
+        SELECT s.uniquename  AS plot_name,
+               (((cvt.name || '|') || db.name || ':') || dbx.accession) AS trait_full
+        FROM phenotypeprop pp
+        JOIN phenotype p       ON pp.phenotype_id = p.phenotype_id
+        JOIN nd_experiment_phenotype nep ON nep.phenotype_id = p.phenotype_id
+        JOIN nd_experiment_stock nes     ON nes.nd_experiment_id = nep.nd_experiment_id
+        JOIN stock s            ON s.stock_id = nes.stock_id
+        JOIN cvterm cvt         ON cvt.cvterm_id = p.cvalue_id
+        JOIN dbxref dbx         ON dbx.dbxref_id = cvt.dbxref_id
+        JOIN db                 ON db.db_id = dbx.db_id
+        JOIN nd_experiment_project nexp ON nexp.nd_experiment_id = nep.nd_experiment_id
+        WHERE pp.type_id = ?
+          AND nexp.project_id = ?
+    });
+    $sth->execute($outlier_type_id, $trial_id);
+
+    # Build a lookup: { plot_uniquename }{ trait_full_name } = 1
+    my %outlier_lookup;
+    while (my ($plot_name, $trait_full) = $sth->fetchrow_array()) {
+        $outlier_lookup{$plot_name}{$trait_full} = 1;
+    }
+
+    return 0 unless keys %outlier_lookup;
+
+    # Read the TSV file and blank out outlier cells
+    my @lines = read_file($pheno_file, { binmode => ':utf8' });
+    return 0 unless @lines;
+
+    my $header = shift @lines;
+    chomp $header;
+    my @headers = split(/\t/, $header);
+
+    # Column indices for the observationUnitName (col 22, 0-indexed)
+    # and the start of trait columns (after notes/metadata columns).
+    # The header layout from PhenotypeMatrix / solGS pipeline:
+    #   0:studyYear ... 22:observationUnitName ... 29+:traits...
+    my $obs_unit_col_idx;
+    my %trait_col_indices;  # trait_full_name => column_index
+
+    for my $i (0 .. $#headers) {
+        if ($headers[$i] eq 'observationUnitName') {
+            $obs_unit_col_idx = $i;
+        }
+        # Trait columns contain '|' (e.g. "Grain yield|CO_321:0001218")
+        elsif ($headers[$i] =~ /\|/) {
+            $trait_col_indices{ $headers[$i] } = $i;
+        }
+    }
+
+    # If the file format doesn't match expectations, skip filtering
+    return 0 unless defined $obs_unit_col_idx && keys %trait_col_indices;
+
+    my $excluded_count = 0;
+
+    for my $line (@lines) {
+        chomp $line;
+        my @cols = split(/\t/, $line, -1);  # preserve empty trailing fields
+
+        my $plot_name = $cols[$obs_unit_col_idx] // '';
+        next unless exists $outlier_lookup{$plot_name};
+
+        for my $trait_name (keys %{ $outlier_lookup{$plot_name} }) {
+            if (exists $trait_col_indices{$trait_name}) {
+                my $idx = $trait_col_indices{$trait_name};
+                # Only blank out if there's actually a value
+                if (defined $cols[$idx] && $cols[$idx] ne '' && $cols[$idx] ne 'NA') {
+                    $cols[$idx] = 'NA';
+                    $excluded_count++;
+                }
+            }
+        }
+
+        $line = join("\t", @cols);
+    }
+
+    # Rewrite the file only if we actually excluded something
+    if ($excluded_count > 0) {
+        my $content = $header . "\n" . join("\n", @lines) . "\n";
+        write_file($pheno_file, { binmode => ':utf8' }, $content);
+    }
+
+    return $excluded_count;
+}
+
+# Persist the outlier exclusion count to a file in the ANOVA cache
+# so the response endpoint (a separate HTTP request) can read it.
+sub _write_outlier_count_file {
+    my ( $self, $c, $count ) = @_;
+
+    my $trial_id = $c->stash->{trial_id};
+    my $trait_id = $c->stash->{trait_id};
+    my $cache    = $c->stash->{anova_cache_dir};
+
+    return unless $cache;
+
+    my $file = catfile($cache, "outlier_count_${trial_id}_${trait_id}.txt");
+    write_file($file, { binmode => ':utf8' }, $count);
+}
+
+# Read the persisted outlier count.
+sub _read_outlier_count_file {
+    my ( $self, $c ) = @_;
+
+    my $trial_id = $c->stash->{trial_id};
+    my $trait_id = $c->stash->{trait_id};
+    my $cache    = $c->stash->{anova_cache_dir};
+
+    return 0 unless $cache;
+
+    my $file = catfile($cache, "outlier_count_${trial_id}_${trait_id}.txt");
+    return 0 unless -s $file;
+
+    my $count = read_file($file, { binmode => ':utf8' });
+    chomp $count;
+    return looks_like_number($count) ? $count : 0;
 }
 
 sub schema {

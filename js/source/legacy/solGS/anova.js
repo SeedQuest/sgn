@@ -4,7 +4,7 @@
  *
  */
 
-var solGS = solGS || function solGS() {};
+var solGS = solGS || function solGS() { };
 
 solGS.anova = {
   canvas: "#anova_canvas",
@@ -112,7 +112,7 @@ solGS.anova = {
     var menuClass = "form-control";
     var menu = new SelectMenu(menuDivId, selectId, menuClass, optionsLabel);
     menu.populateMenu(traits)
-  
+
   },
 
   clearTraitSelection: function () {
@@ -227,21 +227,93 @@ jQuery(document).ready(function () {
                     fileNameDiagnostics +
                     ">Model diagnostics</a>";
 
+                  // Quality Control: show info banner if outliers were excluded
+                  var outlierBanner = '';
+                  if (analysisRes.outliers_excluded && analysisRes.outliers_excluded > 0) {
+                    outlierBanner = '<div class="alert alert-info" style="margin-top:10px">'
+                      + '<strong>Quality Control:</strong> '
+                      + analysisRes.outliers_excluded
+                      + ' outlier value(s) excluded from analysis.'
+                      + '</div>';
+                  }
+
                   jQuery("#anova_table")
                     .prepend(
+                      outlierBanner +
                       '<div style="margin-top: 20px">' +
-                        anovaHtmlTable +
-                        "</div>" +
-                        "<br /> <strong>Download:</strong> " +
-                        anovaTxtFile +
-                        " | " +
-                        modelSummaryFile +
-                        " | " +
-                        diagnosticsFile +
-                        " | " +
-                        AdjMeansFile
+                      anovaHtmlTable +
+                      "</div>" +
+                      "<br /> <strong>Download:</strong> " +
+                      anovaTxtFile +
+                      " | " +
+                      modelSummaryFile +
+                      " | " +
+                      diagnosticsFile +
+                      " | " +
+                      AdjMeansFile +
+                      '<div id="adj_means_inline_table" style="margin-top:20px"></div>'
                     )
                     .show();
+
+                  // Fetch and render adjusted means inline
+                  var adjMeansUrl = analysisRes.adj_means_file;
+                  if (adjMeansUrl) {
+                    jQuery.get(adjMeansUrl, function (tsvData) {
+                      if (!tsvData || !tsvData.trim()) return;
+                      var lines = tsvData.trim().split('\n');
+                      if (lines.length < 2) return;
+
+                      // Parse TSV header and rows
+                      var sep = lines[0].indexOf('\t') >= 0 ? '\t' : ',';
+                      var headers = lines[0].split(sep).map(function (h) { return h.replace(/"/g, '').trim(); });
+                      var rows = [];
+                      for (var r = 1; r < lines.length; r++) {
+                        var cols = lines[r].split(sep).map(function (c) { return c.replace(/"/g, '').trim(); });
+                        if (cols.length >= headers.length) rows.push(cols);
+                      }
+
+                      if (!rows.length) return;
+
+                      // Build HTML table
+                      var html = '<h4 style="color:#2c3e50; margin-top:16px;">Adjusted Means (individual germplasm)</h4>';
+                      html += '<table id="adj_means_dt" class="table table-bordered table-striped table-condensed" style="width:100%">';
+                      html += '<thead><tr>';
+                      headers.forEach(function (h) {
+                        html += '<th>' + h + '</th>';
+                      });
+                      html += '</tr></thead><tbody>';
+
+                      rows.forEach(function (row) {
+                        html += '<tr>';
+                        row.forEach(function (cell, idx) {
+                          // Format numeric columns (skip first which is germplasm name)
+                          if (idx > 0 && !isNaN(parseFloat(cell))) {
+                            html += '<td style="text-align:right">' + parseFloat(cell).toFixed(2) + '</td>';
+                          } else {
+                            html += '<td>' + cell + '</td>';
+                          }
+                        });
+                        html += '</tr>';
+                      });
+                      html += '</tbody></table>';
+
+                      jQuery('#adj_means_inline_table').html(html);
+
+                      // Initialize DataTable for sorting/search if available
+                      if (jQuery.fn.DataTable) {
+                        jQuery('#adj_means_dt').DataTable({
+                          pageLength: 25,
+                          order: [[1, 'desc']],
+                          language: {
+                            search: "Поиск:",
+                            lengthMenu: "Показать _MENU_ записей",
+                            info: "Показано _START_ до _END_ из _TOTAL_",
+                            paginate: { previous: "←", next: "→" }
+                          }
+                        });
+                      }
+                    });
+                  }
                 } else {
                   jQuery(`${canvas} .multi-spinner-container`).hide();
                   solGS.anova.showMessage("There is no anova output for this dataset.");
