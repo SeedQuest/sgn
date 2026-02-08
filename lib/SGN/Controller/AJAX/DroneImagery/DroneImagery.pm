@@ -6647,15 +6647,27 @@ sub get_drone_run_band_projects_GET : Args(0) {
                 $background_removed_threshold_type = 'threshold_background_removed_stitched_drone_imagery_blue';
             }
             elsif ($drone_run_band_type eq 'Green (515-600nm)') {
+            }
+            elsif ($drone_run_band_type eq 'Green (560nm)') {
+                $background_removed_threshold_type = 'threshold_background_removed_stitched_drone_imagery_green';
                 $background_removed_threshold_type = 'threshold_background_removed_stitched_drone_imagery_green';
             }
             elsif ($drone_run_band_type eq 'Red (600-690nm)') {
+            }
+            elsif ($drone_run_band_type eq 'Red (650nm)') {
+                $background_removed_threshold_type = 'threshold_background_removed_stitched_drone_imagery_red';
                 $background_removed_threshold_type = 'threshold_background_removed_stitched_drone_imagery_red';
             }
             elsif ($drone_run_band_type eq 'Red Edge (690-750nm)') {
+            }
+            elsif ($drone_run_band_type eq 'Red Edge (730nm)') {
+                $background_removed_threshold_type = 'threshold_background_removed_stitched_drone_imagery_red_edge';
                 $background_removed_threshold_type = 'threshold_background_removed_stitched_drone_imagery_red_edge';
             }
             elsif ($drone_run_band_type eq 'NIR (780-3000nm)') {
+            }
+            elsif ($drone_run_band_type eq 'NIR (860nm)') {
+                $background_removed_threshold_type = 'threshold_background_removed_stitched_drone_imagery_nir';
                 $background_removed_threshold_type = 'threshold_background_removed_stitched_drone_imagery_nir';
             }
             elsif ($drone_run_band_type eq 'MIR (3000-50000nm)') {

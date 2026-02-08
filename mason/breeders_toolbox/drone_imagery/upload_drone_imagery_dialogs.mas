@@ -13,7 +13,7 @@
       <div class="modal-body">
         <div class="container-fluid">
 
-            <form class="form-horizontal" role="form" method="post" enctype="multipart/form-data" encoding="multipart/form-data" id="upload_drone_imagery_form" name="upload_drone_imagery_form" action="/drone_imagery/upload_drone_imagery" >
+            <form class="form-horizontal" role="form" method="post" enctype="multipart/form-data" encoding="multipart/form-data" id="upload_drone_imagery_form" name="upload_drone_imagery_form" action="/api/drone_imagery/upload_drone_imagery" >
 
                 <&| /util/workflow.mas, id=> "drone_imagery_upload_workflow" &>
                     <&| /util/workflow.mas:step, title=> "Intro" &>
@@ -240,7 +240,7 @@
         <div class="container-fluid">
             <& /page/page_title.mas, title=>"Select Image(s) to Upload" &>
 
-            <form class="form-horizontal" role="form" method="post" enctype="multipart/form-data" encoding="multipart/form-data" id="upload_drone_imagery_odm_form" name="upload_drone_imagery_odm_form" action="/drone_imagery/upload_drone_imagery" >
+            <form class="form-horizontal" role="form" method="post" enctype="multipart/form-data" encoding="multipart/form-data" id="upload_drone_imagery_odm_form" name="upload_drone_imagery_odm_form" action="/api/drone_imagery/upload_drone_imagery" >
                 <input type="hidden" name="drone_run_field_trial_id" value="" >
 
                 <!-- If drone run is selected above, the drone_run_project_id is passed to controller, negating need to create new drone run -->
@@ -306,7 +306,7 @@
         <div class="container-fluid">
             <& /page/page_title.mas, title=>"Select Image(s) to Upload" &>
 
-            <form class="form-horizontal" role="form" method="post" enctype="multipart/form-data" encoding="multipart/form-data" id="upload_drone_imagery_odm_micasense_form" name="upload_drone_imagery_odm_micasense_form" action="/drone_imagery/upload_drone_imagery" >
+            <form class="form-horizontal" role="form" method="post" enctype="multipart/form-data" encoding="multipart/form-data" id="upload_drone_imagery_odm_micasense_form" name="upload_drone_imagery_odm_micasense_form" action="/api/drone_imagery/upload_drone_imagery" >
                 <input type="hidden" name="drone_run_field_trial_id" value="" >
 
                 <!-- If drone run is selected above, the drone_run_project_id is passed to controller, negating need to create new drone run -->
@@ -390,7 +390,7 @@
         <div class="container-fluid">
             <& /page/page_title.mas, title=>"Select Image(s) to Upload" &>
 
-            <form class="form-horizontal" role="form" method="post" enctype="multipart/form-data" encoding="multipart/form-data" id="upload_drone_imagery_one_band_form" name="upload_drone_imagery_one_band_form" action="/drone_imagery/upload_drone_imagery" >
+            <form class="form-horizontal" role="form" method="post" enctype="multipart/form-data" encoding="multipart/form-data" id="upload_drone_imagery_one_band_form" name="upload_drone_imagery_one_band_form" action="/api/drone_imagery/upload_drone_imagery" >
                 <input type="hidden" name="drone_run_field_trial_id" value="" >
 
                 <!-- If drone run is selected above, the drone_run_project_id is passed to controller, negating need to create new drone run -->
@@ -494,7 +494,7 @@
         <div class="container-fluid">
             <& /page/page_title.mas, title=>"Select Image(s) to Upload" &>
 
-            <form class="form-horizontal" role="form" method="post" enctype="multipart/form-data" encoding="multipart/form-data" id="upload_drone_imagery_two_band_form" name="upload_drone_imagery_two_band_form" action="/drone_imagery/upload_drone_imagery" >
+            <form class="form-horizontal" role="form" method="post" enctype="multipart/form-data" encoding="multipart/form-data" id="upload_drone_imagery_two_band_form" name="upload_drone_imagery_two_band_form" action="/api/drone_imagery/upload_drone_imagery" >
                 <input type="hidden" name="drone_run_field_trial_id" value="" >
 
                 <!-- If drone run is selected above, the drone_run_project_id is passed to controller, negating need to create new drone run -->
@@ -643,7 +643,7 @@
         <div class="container-fluid">
             <& /page/page_title.mas, title=>"Select Image(s) to Upload" &>
 
-            <form class="form-horizontal" role="form" method="post" enctype="multipart/form-data" encoding="multipart/form-data" id="upload_drone_imagery_three_band_form" name="upload_drone_imagery_three_band_form" action="/drone_imagery/upload_drone_imagery" >
+            <form class="form-horizontal" role="form" method="post" enctype="multipart/form-data" encoding="multipart/form-data" id="upload_drone_imagery_three_band_form" name="upload_drone_imagery_three_band_form" action="/api/drone_imagery/upload_drone_imagery" >
                 <input type="hidden" name="drone_run_field_trial_id" value="" >
 
                 <!-- If drone run is selected above, the drone_run_project_id is passed to controller, negating need to create new drone run -->
@@ -839,7 +839,7 @@
         <div class="container-fluid">
             <& /page/page_title.mas, title=>"Select Image(s) to Upload" &>
 
-            <form class="form-horizontal" role="form" method="post" enctype="multipart/form-data" encoding="multipart/form-data" id="upload_drone_imagery_four_band_form" name="upload_drone_imagery_four_band_form" action="/drone_imagery/upload_drone_imagery" >
+            <form class="form-horizontal" role="form" method="post" enctype="multipart/form-data" encoding="multipart/form-data" id="upload_drone_imagery_four_band_form" name="upload_drone_imagery_four_band_form" action="/api/drone_imagery/upload_drone_imagery" >
                 <input type="hidden" name="drone_run_field_trial_id" value="" >
 
                 <!-- If drone run is selected above, the drone_run_project_id is passed to controller, negating need to create new drone run -->
@@ -1082,7 +1082,7 @@
         <div class="container-fluid">
             <& /page/page_title.mas, title=>"Select Image(s) to Upload" &>
 
-            <form class="form-horizontal" role="form" method="post" enctype="multipart/form-data" encoding="multipart/form-data" id="upload_drone_imagery_five_band_form" name="upload_drone_imagery_five_band_form" action="/drone_imagery/upload_drone_imagery" >
+            <form class="form-horizontal" role="form" method="post" enctype="multipart/form-data" encoding="multipart/form-data" id="upload_drone_imagery_five_band_form" name="upload_drone_imagery_five_band_form" action="/api/drone_imagery/upload_drone_imagery" >
                 <input type="hidden" name="drone_run_field_trial_id" value="" >
 
                 <!-- If drone run is selected above, the drone_run_project_id is passed to controller, negating need to create new drone run -->
@@ -1372,7 +1372,7 @@
         <div class="container-fluid">
             <& /page/page_title.mas, title=>"Select Image(s) to Upload" &>
 
-            <form class="form-horizontal" role="form" method="post" enctype="multipart/form-data" encoding="multipart/form-data" id="upload_drone_imagery_six_band_form" name="upload_drone_imagery_six_band_form" action="/drone_imagery/upload_drone_imagery" >
+            <form class="form-horizontal" role="form" method="post" enctype="multipart/form-data" encoding="multipart/form-data" id="upload_drone_imagery_six_band_form" name="upload_drone_imagery_six_band_form" action="/api/drone_imagery/upload_drone_imagery" >
                 <input type="hidden" name="drone_run_field_trial_id" value="" >
 
                 <!-- If drone run is selected above, the drone_run_project_id is passed to controller, negating need to create new drone run -->
@@ -1709,7 +1709,7 @@
         <div class="container-fluid">
             <& /page/page_title.mas, title=>"Select Image(s) to Upload" &>
 
-            <form class="form-horizontal" role="form" method="post" enctype="multipart/form-data" encoding="multipart/form-data" id="upload_drone_imagery_seven_band_form" name="upload_drone_imagery_seven_band_form" action="/drone_imagery/upload_drone_imagery" >
+            <form class="form-horizontal" role="form" method="post" enctype="multipart/form-data" encoding="multipart/form-data" id="upload_drone_imagery_seven_band_form" name="upload_drone_imagery_seven_band_form" action="/api/drone_imagery/upload_drone_imagery" >
                 <input type="hidden" name="drone_run_field_trial_id" value="" >
 
                 <!-- If drone run is selected above, the drone_run_project_id is passed to controller, negating need to create new drone run -->
@@ -2093,7 +2093,7 @@
         <div class="container-fluid">
             <& /page/page_title.mas, title=>"Select Image(s) to Upload" &>
 
-            <form class="form-horizontal" role="form" method="post" enctype="multipart/form-data" encoding="multipart/form-data" id="upload_drone_imagery_eight_band_form" name="upload_drone_imagery_eight_band_form" action="/drone_imagery/upload_drone_imagery" >
+            <form class="form-horizontal" role="form" method="post" enctype="multipart/form-data" encoding="multipart/form-data" id="upload_drone_imagery_eight_band_form" name="upload_drone_imagery_eight_band_form" action="/api/drone_imagery/upload_drone_imagery" >
                 <input type="hidden" name="drone_run_field_trial_id" value="" >
 
                 <!-- If drone run is selected above, the drone_run_project_id is passed to controller, negating need to create new drone run -->
@@ -2896,7 +2896,7 @@ jQuery(document).ready(function() {
         upload_drone_imagery_field_trial_id = jQuery(this).val();
         jQuery('#drone_image_upload_drone_runs_table').DataTable({
             destroy : true,
-            ajax : '/api/drone_imagery/drone_runs?select_checkbox_name=upload_drone_imagery_drone_run_select&field_trial_ids='+upload_drone_imagery_field_trial_id+'&disable=1'
+            ajax : '/api/drone_imagery/drone_runs?select_checkbox_name=upload_drone_imagery_drone_run_select&field_trial_ids='+upload_drone_imagery_field_trial_id
         });
     });
 
@@ -3072,7 +3072,7 @@ jQuery(document).ready(function() {
                     alert('Please give a drone run description.');
                 } else if (jQuery('#drone_run_date').val() == ''){
                     alert('Please give a drone run date.');
-                } else if (jQuery('#drone_run_type') == ''){
+                } else if (jQuery('#drone_run_type').val() == ''){
                     alert('Please select a drone run type');
                 } else {
                     jQuery('#drone_run_id').val('');
@@ -3827,93 +3827,82 @@ jQuery(document).ready(function() {
         return false;
     });
 
-    jQuery('#upload_drone_imagery_odm_form').submit(function() {
-        jQuery('#working_msg').html('This can potentially take time to complete. Ensure the file(s) have completely transferred to the server before closing this tab.');
-        jQuery('#working_modal').modal('show');
-        return true;
+    var upload_forms = [
+        '#upload_drone_imagery_odm_form',
+        '#upload_drone_imagery_odm_micasense_form',
+        '#upload_drone_imagery_bulk_previous_form',
+        '#upload_drone_imagery_bulk_form',
+        '#upload_drone_imagery_one_band_form',
+        '#upload_drone_imagery_two_band_form',
+        '#upload_drone_imagery_three_band_form',
+        '#upload_drone_imagery_four_band_form',
+        '#upload_drone_imagery_five_band_form',
+        '#upload_drone_imagery_six_band_form',
+        '#upload_drone_imagery_seven_band_form',
+        '#upload_drone_imagery_eight_band_form'
+    ];
+
+    jQuery.each(upload_forms, function(index, form_id) {
+        jQuery(form_id).submit(function(e) {
+            e.preventDefault();
+            
+            var form = this; // 'this' refers to the form element
+            jQuery(form_id + ' :disabled').removeAttr('disabled');
+            var formData = new FormData(form);
+
+            jQuery('#working_msg').html("Uploading drone imagery... Please wait. Do not close this tab.");
+            jQuery('#working_modal').modal('show');
+            
+            var drone_run_band_unstitched = jQuery('input[name="drone_image_upload_drone_run_band_stitching"]').val();
+            // Ensure variable is defined
+            if (typeof new_drone_run_band_stitching_odm_more_images === 'undefined') { 
+                new_drone_run_band_stitching_odm_more_images = ''; 
+            }
+
+            if (drone_run_band_unstitched == 'yes_open_data_map_stitch' && new_drone_run_band_stitching_odm_more_images == 'No') {
+                jQuery('#working_msg').html("It can take a very long time to assemble the orthophotomosaic depending on the number of images uploaded. Times range from 15 minutes to 6 hours depending on the number of images, not including upload time.");
+            }
+
+            jQuery.ajax({
+                url: "/api/drone_imagery/upload_drone_imagery",
+                type: "POST",
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(response) {
+                    console.log(response);
+                    jQuery('#working_msg').html("");
+                    jQuery('#working_modal').modal("hide");
+
+                    if (response.error) {
+                        jQuery('#drone_run_id').val(response.drone_run_project_id);
+                        if (response.current_image_count) {
+                            jQuery('#drone_image_upload_drone_run_band_stitching_odm_image_count').val(response.current_image_count);
+                        }
+                        alert(response.error);
+                    }
+                    else if (response.success) {
+                        alert("Upload successful! Project ID: " + response.drone_run_project_id);
+                        
+                        // Handle potential multi-part upload logic if needed, otherwise reload
+                        if (drone_run_band_unstitched == 'yes_open_data_map_stitch' && new_drone_run_band_stitching_odm_more_images == 'Yes') {
+                            jQuery('#drone_run_id').val(response.drone_run_project_id);
+                            jQuery('#drone_image_upload_drone_run_band_stitching_odm_image_count').val(response.current_image_count);
+                            alert('Select another zip file and submit! If this is your last file to upload, make sure to change the select to No.');
+                        } else {
+                            location.reload();
+                        }
+                    } else {
+                         alert("Unknown response from server.");
+                    }
+                },
+                error: function(xhr, status, error) {
+                    jQuery('#working_modal').modal("hide");
+                    alert("Upload failed: " + error);
+                }
+            });
+        });
     });
-
-    jQuery('#upload_drone_imagery_odm_micasense_form').submit(function() {
-        jQuery('#working_msg').html('This can potentially take time to complete. Ensure the file(s) have completely transferred to the server before closing this tab.');
-        jQuery('#working_modal').modal('show');
-        return true;
-    });
-
-    jQuery('#upload_drone_imagery_bulk_previous_form').submit(function() {
-        jQuery('#working_msg').html('This can potentially take time to complete. Ensure the file(s) have completely transferred to the server before closing this tab.');
-        jQuery('#working_modal').modal('show');
-        return true;
-    });
-
-    jQuery('#upload_drone_imagery_bulk_form').submit(function() {
-        jQuery('#working_msg').html('This can potentially take time to complete. Ensure the file(s) have completely transferred to the server before closing this tab.');
-        jQuery('#working_modal').modal('show');
-        return true;
-    });
-
-    jQuery('#upload_drone_imagery_one_band_form').submit(function() {
-        jQuery('#working_msg').html('This can potentially take time to complete. Ensure the file(s) have completely transferred to the server before closing this tab.');
-        jQuery('#working_modal').modal('show');
-        return true;
-    });
-
-    jQuery('#upload_drone_imagery_two_band_form').submit(function() {
-        jQuery('#working_msg').html('This can potentially take time to complete. Ensure the file(s) have completely transferred to the server before closing this tab.');
-        jQuery('#working_modal').modal('show');
-        return true;
-    });
-
-    jQuery('#upload_drone_imagery_three_band_form').submit(function() {
-        jQuery('#working_msg').html('This can potentially take time to complete. Ensure the file(s) have completely transferred to the server before closing this tab.');
-        jQuery('#working_modal').modal('show');
-        return true;
-    });
-
-    jQuery('#upload_drone_imagery_four_band_form').submit(function() {
-        jQuery('#working_msg').html('This can potentially take time to complete. Ensure the file(s) have completely transferred to the server before closing this tab.');
-        jQuery('#working_modal').modal('show');
-        return true;
-    });
-
-    jQuery('#upload_drone_imagery_five_band_form').submit(function() {
-        jQuery('#working_msg').html('This can potentially take time to complete. Ensure the file(s) have completely transferred to the server before closing this tab.');
-        jQuery('#working_modal').modal('show');
-        return true;
-    });
-
-    jQuery('#upload_drone_imagery_six_band_form').submit(function() {
-        jQuery('#working_msg').html('This can potentially take time to complete. Ensure the file(s) have completely transferred to the server before closing this tab.');
-        jQuery('#working_modal').modal('show');
-        return true;
-    });
-
-    jQuery('#upload_drone_imagery_seven_band_form').submit(function() {
-        jQuery('#working_msg').html('This can potentially take time to complete. Ensure the file(s) have completely transferred to the server before closing this tab.');
-        jQuery('#working_modal').modal('show');
-        return true;
-    });
-
-    jQuery('#upload_drone_imagery_eight_band_form').submit(function() {
-        jQuery('#working_msg').html('This can potentially take time to complete. Ensure the file(s) have completely transferred to the server before closing this tab.');
-        jQuery('#working_modal').modal('show');
-        return true;
-    });
-
-    // Now handled non-AJAX to get around 2GB file limit
-
-    // jQuery('#upload_drone_imagery_submit').click(function(){
-    //    upload_drone_imagery_form();
-    // });
-
-    // function upload_drone_imagery_form() {
-    //    jQuery('#upload_drone_imagery_form').submit(function(e) {
-    //        jQuery(':disabled').each(function(e) {
-    //            jQuery(this).removeAttr('disabled');
-    //        })
-    //    });
-    //    jQuery('#upload_drone_imagery_form').attr("action", "/api/drone_imagery/upload_drone_imagery");
-    //    jQuery("#upload_drone_imagery_form").submit();
-    // }
 
     // jQuery('#upload_drone_imagery_form').iframePostForm({
     //    json: true,

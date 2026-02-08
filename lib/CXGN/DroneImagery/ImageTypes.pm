@@ -44,7 +44,12 @@ sub get_all_drone_run_band_image_types {
         'Merged 3 Bands BGR',
         'Merged 3 Bands NRN',
         'Merged 3 Bands NReN',
-        'Raster DSM'
+        'Raster DSM',
+        # DJI Mavic 3M specific band types
+        'Green (560nm)',
+        'Red (650nm)',
+        'Red Edge (730nm)',
+        'NIR (860nm)'
     );
     my %image_type_hash;
     foreach (@image_types) {
@@ -742,7 +747,7 @@ sub get_all_project_md_image_observation_unit_plot_polygon_types {
 }
 
 sub get_base_imagery_observation_unit_plot_polygon_term_map {
-    return {
+    my $map = {
         'Blue (450-520nm)' => {
             imagery_types => {
                 threshold_background => ['threshold_background_removed_stitched_drone_imagery_blue'],
@@ -1030,6 +1035,12 @@ sub get_base_imagery_observation_unit_plot_polygon_term_map {
             }
         }
     };
+    # DJI Mavic 3M specific band type aliases
+    $map->{"Green (560nm)"} = $map->{"Green (515-600nm)"};
+    $map->{"Red (650nm)"} = $map->{"Red (600-690nm)"};
+    $map->{"Red Edge (730nm)"} = $map->{"Red Edge (690-750nm)"};
+    $map->{"NIR (860nm)"} = $map->{"NIR (780-3000nm)"};
+    return $map;
 }
 
 sub get_vegetative_index_image_type_term_map {

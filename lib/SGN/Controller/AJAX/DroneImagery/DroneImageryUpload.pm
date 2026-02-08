@@ -1294,9 +1294,39 @@ sub upload_drone_imagery_POST : Args(0) {
                     ["DSM", "OpenDroneMap DSM", "Black and White Image", $odm_dsm_png]
                 );
             }
-            else {
-                die "Camera info not supported for raw image upload ODM stitch: $new_drone_run_camera_info\n";
-            }
+            # Async Worker Refactor for OOM and Timeout Fix
+            # Passing context to standalone script
+            my $dbhost = $c->config->{dbhost};
+            my $dbname = $c->config->{dbname};
+            my $dbuser = $c->config->{dbuser};
+            my $dbpass = $c->config->{dbpass};
+            my $rootpath = $c->config->{rootpath};
+            my $py_exec = $c->config->{python_executable};
+            
+            # Correct path found during debugging: /home/production/cxgn/sgn/bin/run_odm_processing.pl
+            # $rootpath is /home/production/cxgn, so we need to add /sgn/bin/
+            my $worker_cmd = $c->config->{rootpath}."/sgn/bin/run_odm_processing.pl".
+                " --project_id $selected_drone_run_id".
+                " --archive_path ".$c->config->{archive_path}.
+                " --image_path_remaining '$image_path_remaining'".
+                " --image_path_remaining_host '$image_path_remaining_host'".
+                " --camera_info $new_drone_run_camera_info".
+                " --radiocalibration ".($new_drone_run_band_stitching_odm_radiocalibration ? "yes" : "no").
+                " --user_id $user_id".
+                " --user_role $user_role".
+                " --dbhost $dbhost".
+                " --dbname $dbname".
+                " --dbuser $dbuser".
+                " --dbpass $dbpass".
+                " --rootpath $rootpath".
+                " --python_executable '$py_exec'".
+                " --temp_file_docker_log '$temp_file_docker_log'";
+
+            print STDERR "Launching Async ODM Worker: $worker_cmd\n";
+            system("$worker_cmd > /dev/null 2>&1 &");
+            
+            # End of logic for DJI/Micasense
+
 
             my $calibration_info = '';
             if ($new_drone_run_band_stitching_odm_radiocalibration && $new_drone_run_camera_info eq 'micasense_5') {
@@ -1304,6 +1334,9 @@ sub upload_drone_imagery_POST : Args(0) {
             }
             elsif (!$new_drone_run_band_stitching_odm_radiocalibration && $new_drone_run_camera_info eq 'micasense_5') {
                 $calibration_info = ' without radiocalibration';
+            }
+            elsif ($new_drone_run_camera_info eq 'dji_mavic3m') {
+                $calibration_info = ' with camera+sun radiocalibration';
             }
 
             foreach my $m (@stitched_bands) {
