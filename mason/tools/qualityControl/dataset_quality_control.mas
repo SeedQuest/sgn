@@ -12,8 +12,6 @@
 <& /page/page_title.mas, title=>"Quality Control" &>
 
 
-<div id="qualitycontrol_tool">
-</div>
 
 
 <style>
@@ -69,11 +67,10 @@
 
 </style>
 
-<div id="qualitycontrol_tool">
-</div>
+<div id="qualitycontrol_tool"></div>
 
 
-<div class="container">
+<div class="container-fluid">
   <div class="row">
     <div class="col-md-12">
       <div class="container-fluid">
