@@ -344,6 +344,7 @@ sub trait_phenotypes : Chained('trial') PathPart('trait_phenotypes') Args(0) {
 	    start_date => $start_date,
 	    end_date => $end_date,
 	    include_dateless_items => $include_dateless_items,
+        exclude_phenotype_outlier => 1,
     );
 
     my @data = $phenotypes_search->get_phenotype_matrix();
@@ -473,6 +474,17 @@ sub phenotype_summary : Chained('trial') PathPart('phenotypes') Args(0) {
 
     # print STDERR "date params : $date_params\n";
 
+    my $outlier_type_id_q = "SELECT cvterm_id FROM cvterm WHERE name = 'phenotype_outlier' AND cv_id = (SELECT cv_id FROM cv WHERE name = 'phenotype_property')";
+    my ($outlier_type_id) = $dbh->selectrow_array($outlier_type_id_q);
+
+    # Exclude phenotypes marked as outliers by QC
+    my $outlier_filter = '';
+    my $outlier_join = '';
+    if ($outlier_type_id) {
+        $outlier_join = "LEFT JOIN phenotypeprop outlier_prop ON (phenotype.phenotype_id = outlier_prop.phenotype_id AND outlier_prop.type_id = $outlier_type_id)";
+        $outlier_filter = 'AND outlier_prop.phenotypeprop_id IS NULL';
+    }
+
     my $q1 = "SELECT (((cvterm.name::text || '|'::text) || db.name::text) || ':'::text) || dbxref.accession::text AS trait,
         cvterm.cvterm_id,
         count(phenotype.value),
@@ -490,11 +502,13 @@ sub phenotype_summary : Chained('trial') PathPart('phenotypes') Args(0) {
             JOIN stock_relationship on (plot.stock_id = stock_relationship.subject_id)
             JOIN stock as accession on (accession.stock_id = stock_relationship.object_id)
             JOIN dbxref ON cvterm.dbxref_id = dbxref.dbxref_id JOIN db ON dbxref.db_id = db.db_id
+            $outlier_join
         WHERE project_id=?
             AND phenotype.value~?
             AND stock_relationship.type_id=?
             AND plot.type_id=?
             AND accession.type_id=?
+            $outlier_filter
             $date_params
         GROUP BY (((cvterm.name::text || '|'::text) || db.name::text) || ':'::text) || dbxref.accession::text, cvterm.cvterm_id $group_by_additional
         ORDER BY cvterm.name ASC
@@ -565,10 +579,12 @@ sub phenotype_summary : Chained('trial') PathPart('phenotypes') Args(0) {
             JOIN stock_relationship on (plot.stock_id = stock_relationship.subject_id)
             JOIN stock as accession on (accession.stock_id = stock_relationship.object_id)
             JOIN dbxref ON cvterm.dbxref_id = dbxref.dbxref_id JOIN db ON dbxref.db_id = db.db_id
+            $outlier_join
         WHERE project_id=?
             AND stock_relationship.type_id=?
             AND plot.type_id=?
             AND accession.type_id=?
+            $outlier_filter
             $date_params
 	     	$exclude_numeric_trait_ids
         GROUP BY (((cvterm.name::text || '|'::text) || db.name::text) || ':'::text) || dbxref.accession::text, cvterm.cvterm_id $group_by_additional
@@ -5934,7 +5950,36 @@ sub trial_collect_date_range :Chained('trial') :PathPart('collect_date_range') A
 	    return;
     }
 
-    # print STDERR "collect_date_range: START DATE $start_date, END DATE $end_date\n";
+
+    # Normalize dates to YYYY-MM-DD (DB may return timestamps with time part)
+    $start_date = $1 if ($start_date && $start_date =~ /(\d{4}-\d{2}-\d{2})/);
+    $end_date = $1 if ($end_date && $end_date =~ /(\d{4}-\d{2}-\d{2})/);
+
+    # Fallback: use trial planting/harvest dates when phenotype dates are
+    # missing or identical (single-date range breaks the UI slider)
+    my $q_dates = "SELECT value FROM projectprop WHERE project_id=? AND type_id=(SELECT cvterm_id FROM cvterm WHERE name=?)";
+    my $h_dates = $dbh->prepare($q_dates);
+
+    my $needs_fallback = !$start_date || !$end_date || ($start_date eq $end_date);
+
+    if ($needs_fallback) {
+        # Start date = planting date
+        $h_dates->execute($trial_id, 'project_planting_date');
+        my ($raw) = $h_dates->fetchrow_array();
+        $start_date = $1 if ($raw && $raw =~ /(\d{4}-\d{2}-\d{2})/);
+
+        # End date = harvest date or today
+        $h_dates->execute($trial_id, 'project_harvest_date');
+        ($raw) = $h_dates->fetchrow_array();
+        if ($raw && $raw =~ /(\d{4}-\d{2}-\d{2})/ && $1 gt $start_date) {
+            $end_date = $1;
+        } else {
+            my @t = localtime();
+            $end_date = sprintf("%04d-%02d-%02d", $t[5]+1900, $t[4]+1, $t[3]);
+        }
+    }
+
+        # print STDERR "collect_date_range: START DATE $start_date, END DATE $end_date\n";
     $c->stash->{rest} = { trial_id => $trial_id,
 	     start_date => $start_date,
 	     end_date => $end_date,

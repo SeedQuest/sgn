@@ -9,6 +9,7 @@
     <li><a href="/kinship/analysis"><span class="glyphicon glyphicon-link"></span> Kinship & Inbreeding</a></li>
     <li><a href="/tools/stability"><span class="glyphicon glyphicon-adjust"></span> Stability AMMI/GGE</a></li>
     <li><a href="/tools/heritability"><span class="glyphicon glyphicon-scale"></span> Heritability</a></li>
+    <li><a href="/tools/qualitycontrol"><span class="glyphicon glyphicon-check"></span> Quality Control</a></li>
     <li role="separator" class="divider"></li>
     <li><a href="/accession_usage"><span class="glyphicon glyphicon-sort-by-attributes"></span> Accession Usage</a></li>
     <li><a href="/tools/mixedmodels"><span class="glyphicon glyphicon-random"></span> Mixed Models</a></li>
