@@ -237,8 +237,19 @@ jQuery(document).ready(function () {
                       + '</div>';
                   }
 
+                  // QC validation warning: show if trial hasn't been QC-validated
+                  var qcWarningBanner = '';
+                  if (!analysisRes.qc_validated || analysisRes.qc_validated == 0) {
+                    qcWarningBanner = '<div class="alert alert-warning" style="margin-top:10px">'
+                      + '<span class="glyphicon glyphicon-exclamation-sign"></span> '
+                      + '<strong>QC не проведён</strong> — для этого трайла не выполнена проверка качества данных. '
+                      + '<a href="/tools/qualitycontrol" target="_blank">Открыть Quality Control</a>'
+                      + '</div>';
+                  }
+
                   jQuery("#anova_table")
                     .prepend(
+                      qcWarningBanner +
                       outlierBanner +
                       '<div style="margin-top: 20px">' +
                       anovaHtmlTable +
@@ -305,11 +316,63 @@ jQuery(document).ready(function () {
                           pageLength: 25,
                           order: [[1, 'desc']],
                           language: {
-                            search: "Поиск:",
-                            lengthMenu: "Показать _MENU_ записей",
-                            info: "Показано _START_ до _END_ из _TOTAL_",
-                            paginate: { previous: "←", next: "→" }
+                            search: "\u041f\u043e\u0438\u0441\u043a:",
+                            lengthMenu: "\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u044c _MENU_ \u0437\u0430\u043f\u0438\u0441\u0435\u0439",
+                            info: "\u041f\u043e\u043a\u0430\u0437\u0430\u043d\u043e _START_ \u0434\u043e _END_ \u0438\u0437 _TOTAL_",
+                            paginate: { previous: "\u2190", next: "\u2192" }
                           }
+                        });
+                      }
+
+                      // Show baseline info and Save Scores button
+                      var baseline = analysisRes.points_score_baseline;
+                      var psCount = analysisRes.points_score_count;
+                      if (baseline && baseline > 0) {
+                        var baselineHtml = '<div style="margin-top:12px; padding:10px; background:#f0f7ff; border-left:4px solid #3498db; border-radius:4px;">'
+                          + '<strong>Points Score:</strong> '
+                          + '\u0411\u0430\u0437\u043e\u0432\u0430\u044f \u0443\u0440\u043e\u0436\u0430\u0439\u043d\u043e\u0441\u0442\u044c (\u0432\u0435\u0440\u0445\u043d\u0438\u0435 \u2154) = <strong>' + baseline + ' t/ha</strong> = 100 \u0431\u0430\u043b\u043b\u043e\u0432 '
+                          + '| \u0413\u0438\u0431\u0440\u0438\u0434\u043e\u0432: ' + psCount
+                          + ' <button id="save_points_scores_btn" class="btn btn-primary btn-sm" style="margin-left:15px;">'
+                          + '<span class="glyphicon glyphicon-save"></span> \u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u0431\u0430\u043b\u043b\u044b</button>'
+                          + '<span id="save_scores_status" style="margin-left:10px;"></span>'
+                          + '</div>';
+                        jQuery('#adj_means_inline_table').append(baselineHtml);
+
+                        // Save Scores click handler
+                        jQuery('#save_points_scores_btn').on('click', function () {
+                          var btn = jQuery(this);
+                          btn.prop('disabled', true).text('\u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u0438\u0435...');
+                          jQuery('#save_scores_status').html('');
+
+                          var saveArgs = JSON.stringify({
+                            trial_id: solGS.anova.getTrialId(),
+                            trait_id: traitId
+                          });
+
+                          jQuery.ajax({
+                            url: '/anova/save_points_scores/',
+                            type: 'POST',
+                            data: { arguments: saveArgs },
+                            dataType: 'json',
+                            success: function (res) {
+                              if (res.success) {
+                                jQuery('#save_scores_status').html(
+                                  '<span style="color:green"><span class="glyphicon glyphicon-ok"></span> '
+                                  + res.success + '</span>'
+                                );
+                                btn.text('\u2713 \u0421\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u043e').addClass('btn-success').removeClass('btn-primary');
+                              } else {
+                                jQuery('#save_scores_status').html(
+                                  '<span style="color:red">' + (res.Error || '\u041e\u0448\u0438\u0431\u043a\u0430') + '</span>'
+                                );
+                                btn.prop('disabled', false).text('\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u0431\u0430\u043b\u043b\u044b');
+                              }
+                            },
+                            error: function () {
+                              jQuery('#save_scores_status').html('<span style="color:red">\u041e\u0448\u0438\u0431\u043a\u0430 \u0441\u0435\u0442\u0438</span>');
+                              btn.prop('disabled', false).text('\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u0431\u0430\u043b\u043b\u044b');
+                            }
+                          });
                         });
                       }
                     });
