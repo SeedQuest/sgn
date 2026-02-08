@@ -4,9 +4,13 @@ use Moose;
 use Data::Dumper;
 use JSON;
 use Try::Tiny;
+use List::Util qw(sum max min);
 use LWP::UserAgent;
 use URI::Escape;
 use Digest::SHA qw(hmac_sha256_hex);
+use Excel::Writer::XLSX;
+use File::Temp qw(tempfile);
+use POSIX qw(strftime);
 
 BEGIN { extends 'Catalyst::Controller::REST' }
 
@@ -212,26 +216,44 @@ sub _get_cached_weather {
     my @data;
     try {
         my $dbh = $c->dbc->dbh;
+        # Priority merge: ground-truth stations > virtual reanalysis
         my $sth = $dbh->prepare(q{
-            SELECT observation_date, tmax, tmin, precipitation, humidity, solar_radiation
-            FROM weather_observations
-            WHERE location_id = ? AND observation_date BETWEEN ? AND ?
-            ORDER BY observation_date
+            SELECT DISTINCT ON (date)
+                date, temp_max, temp_min, temp_mean, precipitation,
+                humidity_mean, solar_radiation, evapotranspiration,
+                wind_speed_max, dew_point, soil_temp, soil_moisture, source
+            FROM weather_data
+            WHERE location_id = ? AND date BETWEEN ? AND ?
+            ORDER BY date,
+                CASE source
+                    WHEN 'davis' THEN 1
+                    WHEN 'ecowitt' THEN 1
+                    WHEN 'open-meteo' THEN 2
+                    WHEN 'noaa' THEN 3
+                    ELSE 4
+                END
         });
         $sth->execute($location_id, $start_date, $end_date);
         
         while (my $row = $sth->fetchrow_hashref) {
             push @data, {
-                date => $row->{observation_date},
-                tmax => $row->{tmax},
-                tmin => $row->{tmin},
-                precip => $row->{precipitation} || 0,
-                humidity => $row->{humidity},
-                solar => $row->{solar_radiation},
+                date    => $row->{date},
+                tmax    => $row->{temp_max},
+                tmin    => $row->{temp_min},
+                tmean   => $row->{temp_mean},
+                precip  => $row->{precipitation} || 0,
+                humidity => $row->{humidity_mean},
+                solar   => $row->{solar_radiation},
+                et0     => $row->{evapotranspiration},
+                wind    => $row->{wind_speed_max},
+                dewpoint => $row->{dew_point},
+                soil_temp => $row->{soil_temp},
+                soil_moisture => $row->{soil_moisture},
+                source  => $row->{source},
             };
         }
     } catch {
-        # Table may not exist yet - return empty
+        warn "Weather cache read failed: $_";
     };
     
     return \@data;
@@ -243,33 +265,26 @@ sub _cache_weather_data {
     try {
         my $dbh = $c->dbc->dbh;
         
-        # Create table if not exists
-        $dbh->do(q{
-            CREATE TABLE IF NOT EXISTS weather_observations (
-                id SERIAL PRIMARY KEY,
-                location_id INTEGER NOT NULL,
-                observation_date DATE NOT NULL,
-                tmax NUMERIC(5,2),
-                tmin NUMERIC(5,2),
-                precipitation NUMERIC(6,2),
-                humidity NUMERIC(5,2),
-                solar_radiation NUMERIC(8,2),
-                wind_speed NUMERIC(5,2),
-                data_source VARCHAR(50),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(location_id, observation_date)
-            )
-        });
-        
+        # Upsert into weather_data with multi-source support
         my $sth = $dbh->prepare(q{
-            INSERT INTO weather_observations 
-                (location_id, observation_date, tmax, tmin, precipitation, data_source)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT (location_id, observation_date) DO UPDATE SET
-                tmax = EXCLUDED.tmax,
-                tmin = EXCLUDED.tmin,
+            INSERT INTO weather_data
+                (location_id, date, temp_max, temp_min, temp_mean,
+                 precipitation, humidity_mean, solar_radiation,
+                 evapotranspiration, wind_speed_max, dew_point,
+                 soil_temp, soil_moisture, source)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (location_id, date, source) DO UPDATE SET
+                temp_max = EXCLUDED.temp_max,
+                temp_min = EXCLUDED.temp_min,
+                temp_mean = EXCLUDED.temp_mean,
                 precipitation = EXCLUDED.precipitation,
-                data_source = EXCLUDED.data_source
+                humidity_mean = EXCLUDED.humidity_mean,
+                solar_radiation = EXCLUDED.solar_radiation,
+                evapotranspiration = EXCLUDED.evapotranspiration,
+                wind_speed_max = EXCLUDED.wind_speed_max,
+                dew_point = EXCLUDED.dew_point,
+                soil_temp = EXCLUDED.soil_temp,
+                soil_moisture = EXCLUDED.soil_moisture
         });
         
         foreach my $day (@$data) {
@@ -278,7 +293,15 @@ sub _cache_weather_data {
                 $day->{date},
                 $day->{tmax},
                 $day->{tmin},
+                $day->{tmean},
                 $day->{precip} || 0,
+                $day->{humidity},
+                $day->{solar},
+                $day->{et0},
+                $day->{wind},
+                $day->{dewpoint},
+                $day->{soil_temp},
+                $day->{soil_moisture},
                 $source
             );
         }
@@ -294,10 +317,20 @@ sub _cache_weather_data {
 sub _fetch_openmeteo_data {
     my ($self, $lat, $lon, $start_date, $end_date) = @_;
     
-    my $ua = LWP::UserAgent->new(timeout => 30);
+    my $ua = LWP::UserAgent->new(timeout => 60);
+    # Full 17-variable agronomical dataset from Open-Meteo ERA5-Land
+    my $vars = join(',',
+        'temperature_2m_max', 'temperature_2m_min', 'temperature_2m_mean',
+        'precipitation_sum', 'rain_sum', 'snowfall_sum', 'precipitation_hours',
+        'sunshine_duration', 'et0_fao_evapotranspiration',
+        'wind_speed_10m_max', 'wind_gusts_10m_max', 'wind_direction_10m_dominant',
+        'shortwave_radiation_sum', 'relative_humidity_2m_mean',
+        'dew_point_2m_mean',
+        'soil_temperature_0_to_7cm_mean', 'soil_moisture_0_to_7cm_mean',
+    );
     my $url = sprintf(
-        "https://archive-api.open-meteo.com/v1/archive?latitude=%.4f&longitude=%.4f&start_date=%s&end_date=%s&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=auto",
-        $lat, $lon, $start_date, $end_date
+        "https://archive-api.open-meteo.com/v1/archive?latitude=%.4f&longitude=%.4f&start_date=%s&end_date=%s&daily=%s&timezone=auto",
+        $lat, $lon, $start_date, $end_date, $vars
     );
     
     my $response = $ua->get($url);
@@ -390,16 +423,34 @@ sub _parse_api_response {
     if ($source eq 'openmeteo') {
         my $daily = $data->{daily} || {};
         my $dates = $daily->{time} || [];
-        my $tmax_arr = $daily->{temperature_2m_max} || [];
-        my $tmin_arr = $daily->{temperature_2m_min} || [];
+        
+        # Map all 17 Open-Meteo variables to internal field names
+        my $tmax_arr   = $daily->{temperature_2m_max} || [];
+        my $tmin_arr   = $daily->{temperature_2m_min} || [];
+        my $tmean_arr  = $daily->{temperature_2m_mean} || [];
         my $precip_arr = $daily->{precipitation_sum} || [];
+        my $humid_arr  = $daily->{relative_humidity_2m_mean} || [];
+        my $solar_arr  = $daily->{shortwave_radiation_sum} || [];
+        my $et0_arr    = $daily->{et0_fao_evapotranspiration} || [];
+        my $wind_arr   = $daily->{wind_speed_10m_max} || [];
+        my $dew_arr    = $daily->{dew_point_2m_mean} || [];
+        my $soilt_arr  = $daily->{soil_temperature_0_to_7cm_mean} || [];
+        my $soilm_arr  = $daily->{soil_moisture_0_to_7cm_mean} || [];
         
         for my $i (0..$#$dates) {
             push @result, {
-                date => $dates->[$i],
-                tmax => $tmax_arr->[$i] // 20,
-                tmin => $tmin_arr->[$i] // 10,
-                precip => $precip_arr->[$i] // 0,
+                date          => $dates->[$i],
+                tmax          => $tmax_arr->[$i] // 20,
+                tmin          => $tmin_arr->[$i] // 10,
+                tmean         => $tmean_arr->[$i],
+                precip        => $precip_arr->[$i] // 0,
+                humidity      => $humid_arr->[$i],
+                solar         => $solar_arr->[$i],
+                et0           => $et0_arr->[$i],
+                wind          => $wind_arr->[$i],
+                dewpoint      => $dew_arr->[$i],
+                soil_temp     => $soilt_arr->[$i],
+                soil_moisture => $soilm_arr->[$i],
             };
         }
     }
@@ -509,11 +560,11 @@ sub get_cache_stats_GET {
     try {
         my $dbh = $c->dbc->dbh;
         my $sth = $dbh->prepare(q{
-            SELECT COUNT(*) as total, 
+            SELECT COUNT(*) as total,
                    COUNT(DISTINCT location_id) as locations,
-                   MIN(observation_date) as min_date,
-                   MAX(observation_date) as max_date
-            FROM weather_observations
+                   MIN(date) as min_date,
+                   MAX(date) as max_date
+            FROM weather_data
         });
         $sth->execute();
         my $row = $sth->fetchrow_hashref;
@@ -567,6 +618,198 @@ sub _timestamp_to_date {
     my ($self, $ts) = @_;
     my @t = localtime($ts);
     return sprintf("%04d-%02d-%02d", $t[5] + 1900, $t[4] + 1, $t[3]);
+}
+
+# ============================================================================
+# EXCEL EXPORT
+# ============================================================================
+
+sub export_weather : Path('/ajax/weather/export') Args(0) {
+    my ($self, $c) = @_;
+
+    my $location_id = $c->req->param('location_id');
+    my $start_date  = $c->req->param('start_date');
+    my $end_date    = $c->req->param('end_date');
+    my $base_temp   = $c->req->param('base_temp') || 10;
+
+    unless ($location_id && $start_date && $end_date) {
+        $c->res->status(400);
+        $c->res->body('Missing parameters: location_id, start_date, end_date');
+        return;
+    }
+
+    # Get location name for filename
+    my $dbh = $c->dbc->dbh;
+    my ($loc_name) = $dbh->selectrow_array(
+        "SELECT description FROM nd_geolocation WHERE nd_geolocation_id = ?",
+        undef, $location_id
+    );
+    $loc_name ||= "location_$location_id";
+    $loc_name =~ s/[^a-zA-Z0-9_-]/_/g;
+
+    # Fetch weather data from cache
+    my $sth = $dbh->prepare(q{
+        SELECT DISTINCT ON (date)
+            date, temp_max, temp_min, temp_mean, precipitation,
+            humidity_mean, solar_radiation, evapotranspiration,
+            wind_speed_max, dew_point, soil_temp, soil_moisture, source
+        FROM weather_data
+        WHERE location_id = ? AND date BETWEEN ? AND ?
+        ORDER BY date,
+            CASE source
+                WHEN 'davis' THEN 1 WHEN 'ecowitt' THEN 1
+                WHEN 'open-meteo' THEN 2 WHEN 'noaa' THEN 3
+                ELSE 4
+            END
+    });
+    $sth->execute($location_id, $start_date, $end_date);
+
+    my @rows;
+    while (my $row = $sth->fetchrow_hashref) {
+        push @rows, $row;
+    }
+
+    # Generate Excel file
+    # Must pass path (not FH) to Excel::Writer::XLSX so data is
+    # written to disk and readable back via the same path.
+    my ($fh, $tmpfile) = tempfile(SUFFIX => '.xlsx', UNLINK => 1);
+    close($fh);
+    my $workbook = Excel::Writer::XLSX->new($tmpfile);
+
+    # --- Formats ---
+    my $hdr_fmt = $workbook->add_format(
+        bold => 1, bg_color => '#2c3e50', color => 'white',
+        border => 1, align => 'center', valign => 'vcenter',
+    );
+    my $date_fmt = $workbook->add_format(num_format => 'yyyy-mm-dd', border => 1);
+    my $num_fmt  = $workbook->add_format(num_format => '0.0', border => 1, align => 'center');
+    my $num2_fmt = $workbook->add_format(num_format => '0.00', border => 1, align => 'center');
+    my $int_fmt  = $workbook->add_format(num_format => '0', border => 1, align => 'center');
+    my $title_fmt = $workbook->add_format(
+        bold => 1, size => 14, color => '#2c3e50',
+    );
+    my $sub_fmt = $workbook->add_format(italic => 1, color => '#7f8c8d');
+
+    # === Sheet 1: Daily Data ===
+    my $ws1 = $workbook->add_worksheet('Daily Weather Data');
+    $ws1->set_landscape();
+    $ws1->fit_to_pages(1, 0);
+
+    # Title rows
+    $ws1->merge_range('A1:N1', "Weather Data: $loc_name", $title_fmt);
+    $ws1->merge_range('A2:N2', "Period: $start_date to $end_date | Base temp: ${base_temp}°C", $sub_fmt);
+
+    # Headers
+    my @headers = (
+        'Date', 'Tmax (°C)', 'Tmin (°C)', 'Tmean (°C)',
+        'Precip (mm)', 'Humidity (%)', 'Solar (MJ/m²)',
+        'ET₀ (mm)', 'Wind max (km/h)', 'Dew point (°C)',
+        'Soil T (°C)', 'Soil moisture',
+        'GDD/day', 'GDD cum.', 'CHU/day', 'CHU cum.',
+        'Precip cum. (mm)', 'Source',
+    );
+    for my $i (0..$#headers) {
+        $ws1->write(3, $i, $headers[$i], $hdr_fmt);
+        $ws1->set_column($i, $i, $i == 0 ? 12 : 10);
+    }
+
+    # Data rows with GDD/CHU calculations
+    my $gdd_cum = 0;
+    my $chu_cum = 0;
+    my $precip_cum = 0;
+    my $row_idx = 4;
+
+    foreach my $r (@rows) {
+        my $tmax = $r->{temp_max};
+        my $tmin = $r->{temp_min};
+        my $tavg = $r->{temp_mean} || (defined $tmax && defined $tmin ? ($tmax + $tmin) / 2 : undef);
+        my $precip = $r->{precipitation} || 0;
+
+        # GDD calculation (corn 86/50 method: cap at 30°C)
+        my $gdd_day = 0;
+        if (defined $tmax && defined $tmin) {
+            my $t_hi = $tmax > 30 ? 30 : $tmax;
+            my $t_lo = $tmin < $base_temp ? $base_temp : $tmin;
+            $gdd_day = ($t_hi + $t_lo) / 2 - $base_temp;
+            $gdd_day = 0 if $gdd_day < 0;
+        }
+        $gdd_cum += $gdd_day;
+
+        # CHU calculation (Ontario method)
+        my $chu_day = 0;
+        if (defined $tmax && defined $tmin) {
+            my $ymax = 3.33 * ($tmax - 10) - 0.084 * ($tmax - 10)**2;
+            $ymax = 0 if $ymax < 0;
+            my $ymin = 1.8 * ($tmin - 4.4);
+            $ymin = 0 if $ymin < 0;
+            $chu_day = ($ymax + $ymin) / 2;
+        }
+        $chu_cum += $chu_day;
+        $precip_cum += $precip;
+
+        $ws1->write_date_time($row_idx, 0, $r->{date} . 'T00:00:00', $date_fmt);
+        $ws1->write_number($row_idx, 1, $tmax // 0, $num_fmt);
+        $ws1->write_number($row_idx, 2, $tmin // 0, $num_fmt);
+        $ws1->write_number($row_idx, 3, $tavg // 0, $num_fmt);
+        $ws1->write_number($row_idx, 4, $precip, $num_fmt);
+        $ws1->write_number($row_idx, 5, $r->{humidity_mean} // 0, $num_fmt);
+        $ws1->write_number($row_idx, 6, $r->{solar_radiation} // 0, $num_fmt);
+        $ws1->write_number($row_idx, 7, $r->{evapotranspiration} // 0, $num2_fmt);
+        $ws1->write_number($row_idx, 8, $r->{wind_speed_max} // 0, $num_fmt);
+        $ws1->write_number($row_idx, 9, $r->{dew_point} // 0, $num_fmt);
+        $ws1->write_number($row_idx, 10, $r->{soil_temp} // 0, $num_fmt);
+        $ws1->write_number($row_idx, 11, $r->{soil_moisture} // 0, $num2_fmt);
+        $ws1->write_number($row_idx, 12, sprintf('%.1f', $gdd_day), $num_fmt);
+        $ws1->write_number($row_idx, 13, sprintf('%.1f', $gdd_cum), $num_fmt);
+        $ws1->write_number($row_idx, 14, sprintf('%.1f', $chu_day), $num_fmt);
+        $ws1->write_number($row_idx, 15, sprintf('%.1f', $chu_cum), $num_fmt);
+        $ws1->write_number($row_idx, 16, sprintf('%.1f', $precip_cum), $num_fmt);
+        $ws1->write_string($row_idx, 17, $r->{source} || '', $num_fmt);
+        $row_idx++;
+    }
+
+    # Autofilter
+    $ws1->autofilter(3, 0, $row_idx - 1, $#headers);
+    # Freeze header row
+    $ws1->freeze_panes(4, 1);
+
+    # === Sheet 2: Summary ===
+    my $ws2 = $workbook->add_worksheet('Summary');
+    $ws2->merge_range('A1:D1', "Season Summary: $loc_name", $title_fmt);
+    $ws2->merge_range('A2:D2', "$start_date to $end_date", $sub_fmt);
+
+    my $summary_hdr = $workbook->add_format(bold => 1, border => 1, bg_color => '#ecf0f1');
+    my $summary_val = $workbook->add_format(border => 1, num_format => '0.0', align => 'center');
+
+    my @summary = (
+        ['Total Days', scalar @rows],
+        ['Total GDD (base ' . $base_temp . '°C)', $gdd_cum],
+        ['Total CHU', $chu_cum],
+        ['Total Precipitation (mm)', $precip_cum],
+        ['Avg Tmax (°C)', @rows ? (List::Util::sum(map { $_->{temp_max} // 0 } @rows) / @rows) : 0],
+        ['Avg Tmin (°C)', @rows ? (List::Util::sum(map { $_->{temp_min} // 0 } @rows) / @rows) : 0],
+        ['Max Tmax (°C)', @rows ? List::Util::max(map { $_->{temp_max} // 0 } @rows) : 0],
+        ['Min Tmin (°C)', @rows ? List::Util::min(map { $_->{temp_min} // 0 } @rows) : 0],
+    );
+
+    for my $i (0..$#summary) {
+        $ws2->write(3 + $i, 0, $summary[$i][0], $summary_hdr);
+        $ws2->write(3 + $i, 1, sprintf('%.1f', $summary[$i][1]), $summary_val);
+    }
+    $ws2->set_column(0, 0, 30);
+    $ws2->set_column(1, 1, 15);
+
+    $workbook->close();
+
+    # Send file
+    my $filename = "weather_${loc_name}_${start_date}_${end_date}.xlsx";
+    open(my $in, '<:raw', $tmpfile) or die "Cannot read temp file: $!";
+    my $data = do { local $/; <$in> };
+    close($in);
+
+    $c->res->content_type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    $c->res->header('Content-Disposition' => "attachment; filename=\"$filename\"");
+    $c->res->body($data);
 }
 
 1;
