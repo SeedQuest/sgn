@@ -40,7 +40,9 @@ sub new {
 sub parse_file {
     my ($self, $filename, %args) = @_;
 
-    my $flight_date = $args{flight_date} || $self->_date_from_filename($filename);
+    my $flight_date = $args{flight_date}
+        || $self->_date_from_filename($args{source_filename})
+        || $self->_date_from_filename($filename);
     my $timestamp = $flight_date ? "$flight_date 00:00:00+0000" : '';
 
     my $csv = Text::CSV->new({

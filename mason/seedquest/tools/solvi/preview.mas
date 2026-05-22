@@ -1,0 +1,317 @@
+<%args>
+</%args>
+
+<style>
+.sq-solvi-wrap {
+  max-width: 1180px;
+  margin: 28px auto;
+  padding: 0 18px 42px;
+}
+.sq-solvi-title {
+  margin-bottom: 18px;
+  text-align: center;
+}
+.sq-solvi-title h1 {
+  margin: 0 0 8px;
+  font-size: 32px;
+  font-weight: 800;
+  color: #0f172a;
+}
+.sq-solvi-title .sq-solvi-line {
+  width: 80px;
+  height: 4px;
+  margin: 0 auto;
+  border-radius: 2px;
+  background: #06b6d4;
+}
+.sq-solvi-panel {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+  margin-bottom: 18px;
+}
+.sq-solvi-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px;
+  border-bottom: 1px solid #e5e7eb;
+}
+.sq-solvi-panel-head h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+}
+.sq-solvi-body {
+  padding: 18px;
+}
+.sq-solvi-form {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+.sq-solvi-file {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+}
+.sq-solvi-btn {
+  min-height: 44px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 6px;
+  background: #2563eb;
+  color: #fff;
+  font-weight: 700;
+}
+.sq-solvi-btn:disabled {
+  opacity: .65;
+}
+.sq-solvi-error {
+  display: none;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+.sq-solvi-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  gap: 12px;
+}
+.sq-solvi-kpi {
+  padding: 14px;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+.sq-solvi-kpi b {
+  display: block;
+  font-size: 24px;
+  color: #0f172a;
+}
+.sq-solvi-kpi span {
+  display: block;
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 13px;
+}
+.sq-solvi-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.sq-solvi-status--matched {
+  background: #dcfce7;
+  color: #166534;
+}
+.sq-solvi-status--missing {
+  background: #fef3c7;
+  color: #92400e;
+}
+.sq-solvi-table-wrap {
+  overflow-x: auto;
+}
+.sq-solvi-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+}
+.sq-solvi-table th,
+.sq-solvi-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #e5e7eb;
+  vertical-align: top;
+}
+.sq-solvi-table th {
+  color: #475569;
+  font-weight: 700;
+  background: #f8fafc;
+}
+.sq-solvi-muted {
+  color: #64748b;
+}
+.sq-solvi-hidden {
+  display: none;
+}
+@media (max-width: 720px) {
+  .sq-solvi-form,
+  .sq-solvi-kpis {
+    grid-template-columns: 1fr;
+  }
+  .sq-solvi-title h1 {
+    font-size: 26px;
+  }
+}
+</style>
+
+<div class="sq-solvi-wrap">
+  <div class="sq-solvi-title">
+    <h1>Solvi CSV Preview</h1>
+    <div class="sq-solvi-line"></div>
+  </div>
+
+  <div class="sq-solvi-panel">
+    <div class="sq-solvi-panel-head">
+      <h2>Upload Zonal Statistics CSV</h2>
+      <span class="sq-solvi-status sq-solvi-status--missing">Dry run</span>
+    </div>
+    <div class="sq-solvi-body">
+      <form id="sq-solvi-form" class="sq-solvi-form">
+        <input id="sq-solvi-file" name="solvi_csv_file" class="sq-solvi-file" type="file" accept=".csv,text/csv">
+        <button id="sq-solvi-submit" class="sq-solvi-btn" type="submit">Preview</button>
+      </form>
+      <div id="sq-solvi-error" class="sq-solvi-error"></div>
+    </div>
+  </div>
+
+  <div id="sq-solvi-result" class="sq-solvi-hidden">
+    <div class="sq-solvi-panel">
+      <div class="sq-solvi-panel-head">
+        <h2>Summary</h2>
+        <span id="sq-solvi-file-name" class="sq-solvi-muted"></span>
+      </div>
+      <div class="sq-solvi-body">
+        <div class="sq-solvi-kpis">
+          <div class="sq-solvi-kpi"><b id="sq-solvi-units">0</b><span>Plot units</span></div>
+          <div class="sq-solvi-kpi"><b id="sq-solvi-vars">0</b><span>Variables</span></div>
+          <div class="sq-solvi-kpi"><b id="sq-solvi-obs">0</b><span>Observations</span></div>
+          <div class="sq-solvi-kpi"><b id="sq-solvi-buffers">0</b><span>Buffers dropped</span></div>
+          <div class="sq-solvi-kpi"><b id="sq-solvi-date">-</b><span>Flight date</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sq-solvi-panel">
+      <div class="sq-solvi-panel-head">
+        <h2>Trait Mapping</h2>
+      </div>
+      <div class="sq-solvi-body sq-solvi-table-wrap">
+        <table class="sq-solvi-table">
+          <thead>
+            <tr>
+              <th>Solvi Variable</th>
+              <th>Breedbase Match</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="sq-solvi-traits"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="sq-solvi-panel">
+      <div class="sq-solvi-panel-head">
+        <h2>Plot Preview</h2>
+        <span class="sq-solvi-muted">first 10 rows</span>
+      </div>
+      <div class="sq-solvi-body sq-solvi-table-wrap">
+        <table class="sq-solvi-table">
+          <thead>
+            <tr>
+              <th>Zone</th>
+              <th>Values</th>
+            </tr>
+          </thead>
+          <tbody id="sq-solvi-units-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  function esc(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function showError(message) {
+    jQuery('#sq-solvi-error').text(message).show();
+  }
+
+  function render(data) {
+    jQuery('#sq-solvi-error').hide();
+    jQuery('#sq-solvi-result').removeClass('sq-solvi-hidden');
+    jQuery('#sq-solvi-file-name').text(data.filename || '');
+    jQuery('#sq-solvi-units').text(data.unit_count || 0);
+    jQuery('#sq-solvi-vars').text(data.variable_count || 0);
+    jQuery('#sq-solvi-obs').text(data.observation_count || 0);
+    jQuery('#sq-solvi-buffers').text(data.dropped_buffers || 0);
+    jQuery('#sq-solvi-date').text(data.flight_date || '-');
+
+    var traits = data.variables || [];
+    var traitHtml = traits.map(function(item) {
+      var status = item.status === 'matched' ? 'matched' : 'missing';
+      var label = status === 'matched' ? 'Matched' : 'Missing';
+      var matched = item.matched_name ? item.matched_name + ' (#' + item.cvterm_id + ')' : '-';
+      return '<tr><td>' + esc(item.name) + '</td><td>' + esc(matched) + '</td><td><span class="sq-solvi-status sq-solvi-status--' + status + '">' + label + '</span></td></tr>';
+    }).join('');
+    jQuery('#sq-solvi-traits').html(traitHtml);
+
+    var unitHtml = (data.preview_units || []).map(function(unit) {
+      var values = unit.values || {};
+      var pairs = Object.keys(values).sort().map(function(key) {
+        return '<span><b>' + esc(key) + ':</b> ' + esc(values[key]) + '</span>';
+      }).join('<br>');
+      return '<tr><td><b>' + esc(unit.unit) + '</b></td><td>' + pairs + '</td></tr>';
+    }).join('');
+    jQuery('#sq-solvi-units-body').html(unitHtml);
+  }
+
+  jQuery('#sq-solvi-form').on('submit', function(e) {
+    e.preventDefault();
+    var fileInput = document.getElementById('sq-solvi-file');
+    if (!fileInput.files.length) {
+      showError('Choose a Solvi CSV file first.');
+      return;
+    }
+
+    var formData = new FormData();
+    formData.append('solvi_csv_file', fileInput.files[0]);
+
+    jQuery('#sq-solvi-submit').prop('disabled', true).text('Previewing...');
+    jQuery.ajax({
+      url: '/ajax/seedquest/solvi/preview',
+      method: 'POST',
+      data: formData,
+      processData: false,
+      contentType: false,
+      dataType: 'json'
+    }).done(function(response) {
+      if (response.error) {
+        showError(response.error);
+        return;
+      }
+      render(response);
+    }).fail(function(xhr) {
+      var message = 'Solvi preview failed.';
+      if (xhr.responseJSON && xhr.responseJSON.error) {
+        message = xhr.responseJSON.error;
+      }
+      showError(message);
+    }).always(function() {
+      jQuery('#sq-solvi-submit').prop('disabled', false).text('Preview');
+    });
+  });
+})();
+</script>

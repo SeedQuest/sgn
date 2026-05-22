@@ -16,6 +16,7 @@
     <li><a href="/tools/graphicalfiltering"><span class="glyphicon glyphicon-filter"></span> Graphical Filtering</a></li>
     <li><a href="/tools/boxplotter"><span class="glyphicon glyphicon-modal-window"></span> <span data-i18n="boxplotter">BoxPlotter Tool</span></a></li>
     <li><a href="/tools/image_analysis"><span class="glyphicon glyphicon-picture"></span> Image Analysis</a></li>
+    <li><a href="/tools/seedquest/solvi"><span class="glyphicon glyphicon-cloud-upload"></span> Solvi CSV Preview</a></li>
 
     <li role="separator" class="divider"></li>
     <li class="dropdown-header">Weather & Environment</li>
