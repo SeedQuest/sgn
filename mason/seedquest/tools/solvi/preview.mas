@@ -54,6 +54,12 @@
   gap: 12px;
   align-items: center;
 }
+.sq-solvi-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+}
 .sq-solvi-file {
   display: block;
   width: 100%;
@@ -72,6 +78,9 @@
   color: #fff;
   font-weight: 700;
 }
+.sq-solvi-btn--verify {
+  background: #0f766e;
+}
 .sq-solvi-btn:disabled {
   opacity: .65;
 }
@@ -83,6 +92,19 @@
   background: #fef2f2;
   color: #991b1b;
   border: 1px solid #fecaca;
+}
+.sq-solvi-verify {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+.sq-solvi-verify--warning {
+  background: #fffbeb;
+  color: #92400e;
+  border-color: #fde68a;
 }
 .sq-solvi-kpis {
   display: grid;
@@ -153,6 +175,12 @@
   .sq-solvi-kpis {
     grid-template-columns: 1fr;
   }
+  .sq-solvi-actions {
+    justify-content: stretch;
+  }
+  .sq-solvi-actions .sq-solvi-btn {
+    flex: 1 1 0;
+  }
   .sq-solvi-title h1 {
     font-size: 26px;
   }
@@ -173,9 +201,13 @@
     <div class="sq-solvi-body">
       <form id="sq-solvi-form" class="sq-solvi-form">
         <input id="sq-solvi-file" name="solvi_csv_file" class="sq-solvi-file" type="file" accept=".csv,text/csv">
-        <button id="sq-solvi-submit" class="sq-solvi-btn" type="submit">Preview</button>
+        <div class="sq-solvi-actions">
+          <button id="sq-solvi-submit" class="sq-solvi-btn" type="submit">Preview</button>
+          <button id="sq-solvi-verify" class="sq-solvi-btn sq-solvi-btn--verify" type="button">Verify Write</button>
+        </div>
       </form>
       <div id="sq-solvi-error" class="sq-solvi-error"></div>
+      <div id="sq-solvi-verify-result" class="sq-solvi-verify sq-solvi-hidden"></div>
     </div>
   </div>
 
@@ -247,6 +279,15 @@
 
   function showError(message) {
     jQuery('#sq-solvi-error').text(message).show();
+    jQuery('#sq-solvi-verify-result').addClass('sq-solvi-hidden');
+  }
+
+  function showVerify(message, isWarning) {
+    jQuery('#sq-solvi-error').hide();
+    jQuery('#sq-solvi-verify-result')
+      .toggleClass('sq-solvi-verify--warning', !!isWarning)
+      .text(message)
+      .removeClass('sq-solvi-hidden');
   }
 
   function render(data) {
@@ -278,8 +319,7 @@
     jQuery('#sq-solvi-units-body').html(unitHtml);
   }
 
-  jQuery('#sq-solvi-form').on('submit', function(e) {
-    e.preventDefault();
+  function uploadSolvi(endpoint, buttonSelector, busyText, doneText, onSuccess) {
     var fileInput = document.getElementById('sq-solvi-file');
     if (!fileInput.files.length) {
       showError('Choose a Solvi CSV file first.');
@@ -289,9 +329,9 @@
     var formData = new FormData();
     formData.append('solvi_csv_file', fileInput.files[0]);
 
-    jQuery('#sq-solvi-submit').prop('disabled', true).text('Previewing...');
+    jQuery(buttonSelector).prop('disabled', true).text(busyText);
     jQuery.ajax({
-      url: '/ajax/seedquest/solvi/preview',
+      url: endpoint,
       method: 'POST',
       data: formData,
       processData: false,
@@ -302,15 +342,33 @@
         showError(response.error);
         return;
       }
-      render(response);
+      onSuccess(response);
     }).fail(function(xhr) {
-      var message = 'Solvi preview failed.';
+      var message = 'Solvi request failed.';
       if (xhr.responseJSON && xhr.responseJSON.error) {
         message = xhr.responseJSON.error;
       }
       showError(message);
     }).always(function() {
-      jQuery('#sq-solvi-submit').prop('disabled', false).text('Preview');
+      jQuery(buttonSelector).prop('disabled', false).text(doneText);
+    });
+  }
+
+  jQuery('#sq-solvi-form').on('submit', function(e) {
+    e.preventDefault();
+    uploadSolvi('/ajax/seedquest/solvi/preview', '#sq-solvi-submit', 'Previewing...', 'Preview', function(response) {
+      render(response);
+    });
+  });
+
+  jQuery('#sq-solvi-verify').on('click', function() {
+    uploadSolvi('/ajax/seedquest/solvi/verify', '#sq-solvi-verify', 'Verifying...', 'Verify Write', function(response) {
+      render(response);
+      var message = response.message || 'Breedbase write verification passed. No observations were stored.';
+      if (response.warning) {
+        message += ' Warning: ' + response.warning;
+      }
+      showVerify(message, !!response.warning);
     });
   });
 })();

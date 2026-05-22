@@ -4,6 +4,7 @@ use Moose;
 use namespace::autoclean;
 use JSON qw(encode_json);
 use URI::FromHash 'uri';
+use CXGN::Phenotypes::StorePhenotypes;
 use SeedQuest::Solvi::Parser;
 use SGN::Model::Cvterm;
 
@@ -32,19 +33,110 @@ sub preview : Path('/ajax/seedquest/solvi/preview') Args(0) {
         $self->_json_response($c, { error => 'You must be logged in first!' });
     }
 
+    my ($parsed, $filename, $parse_error) = $self->_parse_upload($c);
+    if ($parse_error) {
+        $self->_json_response($c, { error => $parse_error });
+    }
+
+    my $schema = $c->dbic_schema('Bio::Chado::Schema', 'sgn_chado');
+    my $summary = $self->_preview_summary($schema, $parsed, $filename);
+    $self->_json_response($c, $summary);
+}
+
+sub verify_write : Path('/ajax/seedquest/solvi/verify') Args(0) {
+    my ($self, $c) = @_;
+
+    unless ($self->_has_real_user($c)) {
+        $self->_json_response($c, { error => 'You must be logged in first!' });
+    }
+
+    unless ($self->_can_verify_write($c)) {
+        $self->_json_response($c, { error => 'Solvi write verification requires submitter or curator privileges.' });
+    }
+
+    my ($parsed, $filename, $parse_error) = $self->_parse_upload($c);
+    if ($parse_error) {
+        $self->_json_response($c, { error => $parse_error });
+    }
+
+    my $schema = $c->dbic_schema('Bio::Chado::Schema', 'sgn_chado');
+    my $metadata_schema = $c->dbic_schema('CXGN::Metadata::Schema');
+    my $phenome_schema = $c->dbic_schema('CXGN::Phenome::Schema');
+    my $user = $c->user();
+    my $person = $user->get_object();
+    my $user_id = $person->get_sp_person_id();
+    my $operator = eval { $person->get_username() } || eval { $user->get_username() } || 'unknown';
+    my $timestamp = $self->_metadata_timestamp();
+    my %metadata = (
+        archived_file => $filename,
+        archived_file_type => 'seedquest solvi csv verify-only',
+        operator => $operator,
+        date => $timestamp,
+    );
+
+    $c->tempfiles_subdir('/delete_nd_experiment_ids');
+    my $temp_file_nd_experiment_id = $c->config->{basepath} . '/' . $c->tempfile(
+        TEMPLATE => 'delete_nd_experiment_ids/fileXXXX'
+    );
+
+    my $store_phenotypes = CXGN::Phenotypes::StorePhenotypes->new(
+        basepath => $c->config->{basepath},
+        dbhost => $c->config->{dbhost},
+        dbname => $c->config->{dbname},
+        dbuser => $c->config->{dbuser},
+        dbpass => $c->config->{dbpass},
+        temp_file_nd_experiment_id => $temp_file_nd_experiment_id,
+        bcs_schema => $schema,
+        metadata_schema => $metadata_schema,
+        phenome_schema => $phenome_schema,
+        user_id => $user_id,
+        stock_list => $parsed->{units},
+        trait_list => $parsed->{variables},
+        values_hash => $parsed->{data},
+        has_timestamps => 1,
+        overwrite_values => 0,
+        remove_values => 0,
+        metadata_hash => \%metadata,
+        composable_validation_check_name => $c->config->{composable_validation_check_name},
+        allow_repeat_measures => $c->config->{allow_repeat_measures},
+    );
+
+    my ($verified_warning, $verified_error);
+    my $ok = eval {
+        ($verified_warning, $verified_error) = $store_phenotypes->verify();
+        1;
+    };
+    if (!$ok) {
+        $verified_error = $@ || 'Solvi write verification failed.';
+    }
+    if ($verified_error) {
+        $self->_json_response($c, { error => "Breedbase write verification failed: $verified_error" });
+    }
+
+    my $summary = $self->_preview_summary($schema, $parsed, $filename);
+    $summary->{verified} = JSON::true;
+    $summary->{message} = 'Breedbase write verification passed. No observations were stored.';
+    $summary->{warning} = $verified_warning || '';
+    $summary->{write_enabled} = JSON::false;
+    $self->_json_response($c, $summary);
+}
+
+sub _parse_upload {
+    my ($self, $c) = @_;
+
     my $upload = $c->req->upload('solvi_csv_file');
     unless ($upload) {
-        $self->_json_response($c, { error => 'No Solvi CSV file was uploaded.' });
+        return (undef, undef, 'No Solvi CSV file was uploaded.');
     }
 
     my $filename = $upload->filename || '';
     if ($filename !~ /\.csv\z/i) {
-        $self->_json_response($c, { error => 'Solvi preview expects a .csv file.' });
+        return (undef, undef, 'Solvi upload expects a .csv file.');
     }
 
     my $size = eval { $upload->size } || 0;
     if ($size > $MAX_UPLOAD_BYTES) {
-        $self->_json_response($c, { error => 'Solvi CSV is too large for preview.' });
+        return (undef, undef, 'Solvi CSV is too large. Maximum size is 10 MB.');
     }
 
     my $trait_map = $c->config->{seedquest_solvi_trait_map} || {};
@@ -54,12 +146,10 @@ sub preview : Path('/ajax/seedquest/solvi/preview') Args(0) {
     );
 
     if ($parsed->{error}) {
-        $self->_json_response($c, { error => $parsed->{error} });
+        return (undef, undef, $parsed->{error});
     }
 
-    my $schema = $c->dbic_schema('Bio::Chado::Schema', 'sgn_chado');
-    my $summary = $self->_preview_summary($schema, $parsed, $filename);
-    $self->_json_response($c, $summary);
+    return ($parsed, $filename, undef);
 }
 
 sub _preview_summary {
@@ -142,6 +232,29 @@ sub _has_real_user {
     return 0 unless $person;
     my $sp_person_id = eval { $person->get_sp_person_id() };
     return defined $sp_person_id && $sp_person_id > 0 ? 1 : 0;
+}
+
+sub _can_verify_write {
+    my ($self, $c) = @_;
+    my $user = $c->user();
+    return 0 unless $user;
+    my $user_type = eval { $user->get_object()->get_user_type() } || '';
+    return 1 if $user_type eq 'curator' || $user_type eq 'submitter';
+    my @roles = eval { $user->roles() };
+    return scalar(grep { $_ eq 'curator' || $_ eq 'submitter' } @roles) ? 1 : 0;
+}
+
+sub _metadata_timestamp {
+    my ($sec, $min, $hour, $mday, $mon, $year) = localtime();
+    return sprintf(
+        '%04d-%02d-%02d_%02d:%02d:%02d',
+        $year + 1900,
+        $mon + 1,
+        $mday,
+        $hour,
+        $min,
+        $sec,
+    );
 }
 
 __PACKAGE__->meta->make_immutable;

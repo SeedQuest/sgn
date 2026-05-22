@@ -40,24 +40,198 @@ my @OBJECTS = (
 );
 
 my @VARIABLES = (
-    [ 'SOLVI_000001', 'Canopy NDVI - mean',              'SOLVI_OBJECT_000001' ],
-    [ 'SOLVI_000002', 'Canopy NDVI - median',            'SOLVI_OBJECT_000001' ],
-    [ 'SOLVI_000003', 'Canopy NDVI - stdev',             'SOLVI_OBJECT_000001' ],
-    [ 'SOLVI_000004', 'Canopy NDRE - mean',              'SOLVI_OBJECT_000002' ],
-    [ 'SOLVI_000005', 'Canopy NDRE - median',            'SOLVI_OBJECT_000002' ],
-    [ 'SOLVI_000006', 'Canopy NDRE - stdev',             'SOLVI_OBJECT_000002' ],
-    [ 'SOLVI_000007', 'Canopy OSAVI - mean',             'SOLVI_OBJECT_000003' ],
-    [ 'SOLVI_000008', 'Canopy OSAVI - median',           'SOLVI_OBJECT_000003' ],
-    [ 'SOLVI_000009', 'Canopy OSAVI - stdev',            'SOLVI_OBJECT_000003' ],
-    [ 'SOLVI_000010', 'Canopy GRVI - mean',              'SOLVI_OBJECT_000004' ],
-    [ 'SOLVI_000011', 'Canopy GRVI - median',            'SOLVI_OBJECT_000004' ],
-    [ 'SOLVI_000012', 'Canopy GRVI - stdev',             'SOLVI_OBJECT_000004' ],
-    [ 'SOLVI_000013', 'Canopy NIR reflectance - mean',   'SOLVI_OBJECT_000005' ],
-    [ 'SOLVI_000014', 'Canopy NIR reflectance - median', 'SOLVI_OBJECT_000005' ],
-    [ 'SOLVI_000015', 'Canopy NIR reflectance - stdev',  'SOLVI_OBJECT_000005' ],
-    [ 'SOLVI_000016', 'Canopy height (cm) - mean',       'SOLVI_OBJECT_000006' ],
-    [ 'SOLVI_000017', 'Canopy height (cm) - median',     'SOLVI_OBJECT_000006' ],
-    [ 'SOLVI_000018', 'Canopy height (cm) - stdev',      'SOLVI_OBJECT_000006' ],
+    {
+        accession => 'SOLVI_000001',
+        name => 'Canopy NDVI - mean',
+        object_accession => 'SOLVI_OBJECT_000001',
+        entity => 'Canopy',
+        attribute => 'NDVI',
+        statistic => 'mean',
+        decimal_places => '4',
+        minimum => '-1',
+        maximum => '1',
+    },
+    {
+        accession => 'SOLVI_000002',
+        name => 'Canopy NDVI - median',
+        object_accession => 'SOLVI_OBJECT_000001',
+        entity => 'Canopy',
+        attribute => 'NDVI',
+        statistic => 'median',
+        decimal_places => '4',
+        minimum => '-1',
+        maximum => '1',
+    },
+    {
+        accession => 'SOLVI_000003',
+        name => 'Canopy NDVI - stdev',
+        object_accession => 'SOLVI_OBJECT_000001',
+        entity => 'Canopy',
+        attribute => 'NDVI',
+        statistic => 'stdev',
+        decimal_places => '4',
+        minimum => '0',
+        maximum => '2',
+    },
+    {
+        accession => 'SOLVI_000004',
+        name => 'Canopy NDRE - mean',
+        object_accession => 'SOLVI_OBJECT_000002',
+        entity => 'Canopy',
+        attribute => 'NDRE',
+        statistic => 'mean',
+        decimal_places => '4',
+        minimum => '-1',
+        maximum => '1',
+    },
+    {
+        accession => 'SOLVI_000005',
+        name => 'Canopy NDRE - median',
+        object_accession => 'SOLVI_OBJECT_000002',
+        entity => 'Canopy',
+        attribute => 'NDRE',
+        statistic => 'median',
+        decimal_places => '4',
+        minimum => '-1',
+        maximum => '1',
+    },
+    {
+        accession => 'SOLVI_000006',
+        name => 'Canopy NDRE - stdev',
+        object_accession => 'SOLVI_OBJECT_000002',
+        entity => 'Canopy',
+        attribute => 'NDRE',
+        statistic => 'stdev',
+        decimal_places => '4',
+        minimum => '0',
+        maximum => '2',
+    },
+    {
+        accession => 'SOLVI_000007',
+        name => 'Canopy OSAVI - mean',
+        object_accession => 'SOLVI_OBJECT_000003',
+        entity => 'Canopy',
+        attribute => 'OSAVI',
+        statistic => 'mean',
+        decimal_places => '4',
+        minimum => '-1',
+        maximum => '1',
+    },
+    {
+        accession => 'SOLVI_000008',
+        name => 'Canopy OSAVI - median',
+        object_accession => 'SOLVI_OBJECT_000003',
+        entity => 'Canopy',
+        attribute => 'OSAVI',
+        statistic => 'median',
+        decimal_places => '4',
+        minimum => '-1',
+        maximum => '1',
+    },
+    {
+        accession => 'SOLVI_000009',
+        name => 'Canopy OSAVI - stdev',
+        object_accession => 'SOLVI_OBJECT_000003',
+        entity => 'Canopy',
+        attribute => 'OSAVI',
+        statistic => 'stdev',
+        decimal_places => '4',
+        minimum => '0',
+        maximum => '2',
+    },
+    {
+        accession => 'SOLVI_000010',
+        name => 'Canopy GRVI - mean',
+        object_accession => 'SOLVI_OBJECT_000004',
+        entity => 'Canopy',
+        attribute => 'GRVI',
+        statistic => 'mean',
+        decimal_places => '4',
+        minimum => '-1',
+        maximum => '1',
+    },
+    {
+        accession => 'SOLVI_000011',
+        name => 'Canopy GRVI - median',
+        object_accession => 'SOLVI_OBJECT_000004',
+        entity => 'Canopy',
+        attribute => 'GRVI',
+        statistic => 'median',
+        decimal_places => '4',
+        minimum => '-1',
+        maximum => '1',
+    },
+    {
+        accession => 'SOLVI_000012',
+        name => 'Canopy GRVI - stdev',
+        object_accession => 'SOLVI_OBJECT_000004',
+        entity => 'Canopy',
+        attribute => 'GRVI',
+        statistic => 'stdev',
+        decimal_places => '4',
+        minimum => '0',
+        maximum => '2',
+    },
+    {
+        accession => 'SOLVI_000013',
+        name => 'Canopy NIR reflectance - mean',
+        object_accession => 'SOLVI_OBJECT_000005',
+        entity => 'Canopy',
+        attribute => 'NIR reflectance',
+        statistic => 'mean',
+        decimal_places => '4',
+        minimum => '0',
+    },
+    {
+        accession => 'SOLVI_000014',
+        name => 'Canopy NIR reflectance - median',
+        object_accession => 'SOLVI_OBJECT_000005',
+        entity => 'Canopy',
+        attribute => 'NIR reflectance',
+        statistic => 'median',
+        decimal_places => '4',
+        minimum => '0',
+    },
+    {
+        accession => 'SOLVI_000015',
+        name => 'Canopy NIR reflectance - stdev',
+        object_accession => 'SOLVI_OBJECT_000005',
+        entity => 'Canopy',
+        attribute => 'NIR reflectance',
+        statistic => 'stdev',
+        decimal_places => '4',
+        minimum => '0',
+    },
+    {
+        accession => 'SOLVI_000016',
+        name => 'Canopy height (cm) - mean',
+        object_accession => 'SOLVI_OBJECT_000006',
+        entity => 'Canopy',
+        attribute => 'height',
+        statistic => 'mean',
+        decimal_places => '2',
+        minimum => '0',
+    },
+    {
+        accession => 'SOLVI_000017',
+        name => 'Canopy height (cm) - median',
+        object_accession => 'SOLVI_OBJECT_000006',
+        entity => 'Canopy',
+        attribute => 'height',
+        statistic => 'median',
+        decimal_places => '2',
+        minimum => '0',
+    },
+    {
+        accession => 'SOLVI_000018',
+        name => 'Canopy height (cm) - stdev',
+        object_accession => 'SOLVI_OBJECT_000006',
+        entity => 'Canopy',
+        attribute => 'height',
+        statistic => 'stdev',
+        decimal_places => '2',
+        minimum => '0',
+    },
 );
 
 sub patch {
@@ -76,7 +250,17 @@ sub patch {
         my $cv_id = _ensure_cv($dbh);
         my $variable_of_type_id = _cvterm_id_by_name($dbh, 'relationship', 'VARIABLE_OF');
         my $trait_format_type_id = _cvterm_id_by_name($dbh, 'trait_property', 'trait_format');
+        my $trait_categories_type_id = _cvterm_id_by_name($dbh, 'trait_property', 'trait_categories');
+        my $trait_decimal_places_type_id = _cvterm_id_by_name($dbh, 'trait_property', 'trait_decimal_places');
+        my $trait_minimum_type_id = _cvterm_id_by_name($dbh, 'trait_property', 'trait_minimum');
+        my $trait_maximum_type_id = _cvterm_id_by_name($dbh, 'trait_property', 'trait_maximum');
         my $trait_repeat_type_id = _cvterm_id_by_name($dbh, 'trait_property', 'trait_repeat_type');
+        my $trait_entity_type_id = _cvterm_id_by_name($dbh, 'trait_property', 'trait_entity');
+        my $trait_attribute_type_id = _cvterm_id_by_name($dbh, 'trait_property', 'trait_attribute');
+        my $trait_method_name_type_id = _cvterm_id_by_name($dbh, 'trait_property', 'trait_method_name');
+        my $trait_method_description_type_id = _cvterm_id_by_name($dbh, 'trait_property', 'trait_method_description');
+        my $trait_method_class_type_id = _cvterm_id_by_name($dbh, 'trait_property', 'trait_method_class');
+        my $trait_method_formula_type_id = _cvterm_id_by_name($dbh, 'trait_property', 'trait_method_formula');
 
         my %object_ids;
         for my $object (@OBJECTS) {
@@ -85,11 +269,20 @@ sub patch {
         }
 
         for my $variable (@VARIABLES) {
-            my ($accession, $name, $object_accession) = @$variable;
-            my $variable_id = _ensure_cvterm($dbh, $db_id, $cv_id, $accession, $name);
-            _ensure_relationship($dbh, $variable_id, $variable_of_type_id, $object_ids{$object_accession});
-            _ensure_cvtermprop($dbh, $variable_id, $trait_format_type_id, 'numeric');
-            _ensure_cvtermprop($dbh, $variable_id, $trait_repeat_type_id, 'time_series');
+            my $variable_id = _ensure_cvterm($dbh, $db_id, $cv_id, $variable->{accession}, $variable->{name});
+            _ensure_relationship($dbh, $variable_id, $variable_of_type_id, $object_ids{$variable->{object_accession}});
+            _replace_cvtermprop($dbh, $variable_id, $trait_format_type_id, 'numeric');
+            _replace_cvtermprop($dbh, $variable_id, $trait_categories_type_id, '');
+            _replace_cvtermprop($dbh, $variable_id, $trait_repeat_type_id, 'time_series');
+            _replace_cvtermprop($dbh, $variable_id, $trait_decimal_places_type_id, $variable->{decimal_places});
+            _replace_cvtermprop($dbh, $variable_id, $trait_minimum_type_id, $variable->{minimum});
+            _replace_cvtermprop($dbh, $variable_id, $trait_maximum_type_id, $variable->{maximum});
+            _replace_cvtermprop($dbh, $variable_id, $trait_entity_type_id, $variable->{entity});
+            _replace_cvtermprop($dbh, $variable_id, $trait_attribute_type_id, $variable->{attribute});
+            _replace_cvtermprop($dbh, $variable_id, $trait_method_name_type_id, "Solvi $variable->{statistic} zonal statistic");
+            _replace_cvtermprop($dbh, $variable_id, $trait_method_description_type_id, _method_description($variable));
+            _replace_cvtermprop($dbh, $variable_id, $trait_method_class_type_id, 'computational');
+            _replace_cvtermprop($dbh, $variable_id, $trait_method_formula_type_id, _method_formula($variable));
         }
 
         $dbh->commit;
@@ -238,6 +431,38 @@ sub _ensure_cvtermprop {
         $type_id,
         $value,
     );
+}
+
+sub _replace_cvtermprop {
+    my ($dbh, $cvterm_id, $type_id, $value) = @_;
+    return unless defined $value;
+
+    $dbh->do(
+        'delete from cvtermprop where cvterm_id = ? and type_id = ?',
+        undef,
+        $cvterm_id,
+        $type_id,
+    );
+
+    $dbh->do(
+        'insert into cvtermprop (cvterm_id, type_id, value, rank) values (?, ?, ?, 0)',
+        undef,
+        $cvterm_id,
+        $type_id,
+        $value,
+    );
+}
+
+sub _method_description {
+    my ($variable) = @_;
+    return "Computed from a Solvi zonal statistics CSV for each Breedbase plot zone; statistic=$variable->{statistic}, attribute=$variable->{attribute}.";
+}
+
+sub _method_formula {
+    my ($variable) = @_;
+    return 'Solvi exported Height (m) values are converted to centimeters before import.'
+        if $variable->{attribute} eq 'height';
+    return "Solvi exported $variable->{attribute} $variable->{statistic} value.";
 }
 
 sub _cvterm_id_by_name {
