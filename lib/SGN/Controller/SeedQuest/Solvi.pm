@@ -573,7 +573,8 @@ sub _archive_upload_file {
     my $source = $upload_info->{tempname};
     return ('', 'Uploaded Solvi file is no longer available for archiving.') unless $source && -f $source;
 
-    my $archive_dir = File::Spec->catdir($c->config->{basepath}, 'seedquest_solvi_uploads');
+    my $archive_root = $c->config->{archive_path} || $c->config->{tempfiles_base} || $c->config->{basepath};
+    my $archive_dir = File::Spec->catdir($archive_root, 'seedquest_solvi_uploads');
     eval { make_path($archive_dir) unless -d $archive_dir; };
     if ($@) {
         return ('', "Could not create Solvi archive directory: $@");

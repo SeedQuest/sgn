@@ -16,6 +16,7 @@ cron:  0 6 * * *  /srv/breedbase/tools/weather/sync_weather.py
 import os
 import sys
 import argparse
+import time
 from datetime import datetime, timedelta
 
 import requests
@@ -53,6 +54,10 @@ COL_FROM_VAR = {
 
 ARCHIVE_URL = 'https://archive-api.open-meteo.com/v1/archive'
 RECENT_URL  = 'https://historical-forecast-api.open-meteo.com/v1/forecast'
+MAX_SYNC_DAYS = int(os.environ.get('WEATHER_MAX_SYNC_DAYS', '370'))
+MAX_LOCATIONS = int(os.environ.get('WEATHER_MAX_LOCATIONS', '500'))
+REQUEST_TIMEOUT = int(os.environ.get('WEATHER_REQUEST_TIMEOUT', '30'))
+REQUEST_PAUSE_SECONDS = float(os.environ.get('WEATHER_REQUEST_PAUSE_SECONDS', '0.2'))
 
 DDL = """
 CREATE TABLE IF NOT EXISTS weather_data (
@@ -104,18 +109,33 @@ def log(msg):
         pass
 
 
-def get_locations(conn):
+def get_locations(conn, max_locations=MAX_LOCATIONS):
     with conn.cursor() as cur:
         cur.execute("""
             SELECT nd_geolocation_id, description, latitude, longitude
             FROM nd_geolocation
             WHERE latitude IS NOT NULL AND longitude IS NOT NULL
-        """)
-        return [{'id': r[0], 'name': r[1], 'lat': float(r[2]), 'lon': float(r[3])}
-                for r in cur.fetchall()]
+            ORDER BY nd_geolocation_id
+            LIMIT %s
+        """, (max_locations + 1,))
+        rows = cur.fetchall()
+        if len(rows) > max_locations:
+            raise RuntimeError(
+                f"Too many weather locations ({len(rows)}+). "
+                f"Limit is {max_locations}; set WEATHER_MAX_LOCATIONS or --max-locations deliberately."
+            )
+        locations = []
+        for r in rows:
+            lat = float(r[2])
+            lon = float(r[3])
+            if lat < -90 or lat > 90 or lon < -180 or lon > 180:
+                log(f"  · skipping invalid coordinates for location id={r[0]} ({lat}, {lon})")
+                continue
+            locations.append({'id': r[0], 'name': r[1], 'lat': lat, 'lon': lon})
+        return locations
 
 
-def fetch_openmeteo(lat, lon, start_date, end_date):
+def fetch_openmeteo(lat, lon, start_date, end_date, timeout=REQUEST_TIMEOUT):
     """Recent dates (>=2022) -> Historical Forecast API (low lag); older -> Archive."""
     base = RECENT_URL if int(start_date[:4]) >= 2022 else ARCHIVE_URL
     params = {
@@ -123,7 +143,7 @@ def fetch_openmeteo(lat, lon, start_date, end_date):
         'start_date': start_date, 'end_date': end_date,
         'daily': ','.join(DAILY_VARS), 'timezone': 'auto',
     }
-    r = requests.get(base, params=params, timeout=60)
+    r = requests.get(base, params=params, timeout=timeout)
     r.raise_for_status()
     return r.json()
 
@@ -147,7 +167,18 @@ def rows_from_response(location_id, data, source='open-meteo'):
     return rows
 
 
-def sync(days_back=30, retain_days=730):
+def sync(days_back=30, retain_days=730, max_locations=MAX_LOCATIONS, request_timeout=REQUEST_TIMEOUT, pause_seconds=REQUEST_PAUSE_SECONDS):
+    if days_back < 1 or days_back > MAX_SYNC_DAYS:
+        raise ValueError(f"--days must be between 1 and {MAX_SYNC_DAYS}")
+    if retain_days < 0:
+        raise ValueError("--retain must be zero or greater")
+    if max_locations < 1 or max_locations > MAX_LOCATIONS:
+        raise ValueError(f"--max-locations must be between 1 and {MAX_LOCATIONS}")
+    if request_timeout < 5 or request_timeout > 120:
+        raise ValueError("--request-timeout must be between 5 and 120 seconds")
+    if pause_seconds < 0 or pause_seconds > 10:
+        raise ValueError("--pause must be between 0 and 10 seconds")
+
     conn = psycopg2.connect(**DB_CONFIG)
     conn.autocommit = False
     try:
@@ -155,7 +186,7 @@ def sync(days_back=30, retain_days=730):
             cur.execute(DDL)
         conn.commit()
 
-        locations = get_locations(conn)
+        locations = get_locations(conn, max_locations)
         log(f"=== Weather sync: {len(locations)} location(s) ===")
         if not locations:
             return
@@ -165,9 +196,9 @@ def sync(days_back=30, retain_days=730):
         log(f"Range {start_date} .. {end_date}")
 
         ok = 0
-        for loc in locations:
+        for i, loc in enumerate(locations):
             try:
-                data = fetch_openmeteo(loc['lat'], loc['lon'], start_date, end_date)
+                data = fetch_openmeteo(loc['lat'], loc['lon'], start_date, end_date, request_timeout)
                 rows = rows_from_response(loc['id'], data)
                 if rows:
                     with conn.cursor() as cur:
@@ -180,6 +211,8 @@ def sync(days_back=30, retain_days=730):
             except Exception as e:
                 conn.rollback()
                 log(f"  ✗ {loc['name']} (id={loc['id']}): {e}")
+            if pause_seconds and i < len(locations) - 1:
+                time.sleep(pause_seconds)
 
         if ok == 0:
             raise RuntimeError(f"Weather sync failed for all {len(locations)} locations")
@@ -199,18 +232,21 @@ def sync(days_back=30, retain_days=730):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('--days', type=int, default=30, help='Days of history to refresh')
+    p.add_argument('--days', type=int, default=30, help=f'Days of history to refresh (1..{MAX_SYNC_DAYS})')
     p.add_argument('--retain', type=int, default=730, help='Delete weather_data older than N days (0 = keep all)')
+    p.add_argument('--max-locations', type=int, default=MAX_LOCATIONS, help=f'Max locations to sync in one run (1..{MAX_LOCATIONS})')
+    p.add_argument('--request-timeout', type=int, default=REQUEST_TIMEOUT, help='Open-Meteo request timeout in seconds (5..120)')
+    p.add_argument('--pause', type=float, default=REQUEST_PAUSE_SECONDS, help='Seconds to pause between external API requests (0..10)')
     p.add_argument('--list', action='store_true', help='List locations only')
     args = p.parse_args()
 
     if args.list:
         conn = psycopg2.connect(**DB_CONFIG)
-        for loc in get_locations(conn):
+        for loc in get_locations(conn, args.max_locations):
             print(f"  {loc['id']}: {loc['name']} ({loc['lat']}, {loc['lon']})")
         conn.close()
     else:
-        sync(args.days, args.retain)
+        sync(args.days, args.retain, args.max_locations, args.request_timeout, args.pause)
 
 
 if __name__ == '__main__':
