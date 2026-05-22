@@ -35,9 +35,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 14px;
   padding: 16px 18px;
   border-bottom: 1px solid #e5e7eb;
+}
+.sq-solvi-panel-head .sq-solvi-muted {
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 .sq-solvi-panel-head h2 {
   margin: 0;
@@ -53,6 +58,33 @@
   grid-template-columns: minmax(220px, 1fr) auto;
   gap: 12px;
   align-items: center;
+}
+.sq-solvi-meta {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  gap: 12px;
+  margin-top: 4px;
+}
+.sq-solvi-meta label {
+  display: block;
+}
+.sq-solvi-meta span {
+  display: block;
+  margin-bottom: 5px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+}
+.sq-solvi-meta input {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+}
+.sq-solvi-meta-wide {
+  grid-column: span 2;
 }
 .sq-solvi-actions {
   display: flex;
@@ -136,6 +168,7 @@
   border-radius: 999px;
   font-size: 12px;
   font-weight: 700;
+  white-space: nowrap;
 }
 .sq-solvi-status--matched {
   background: #dcfce7;
@@ -167,13 +200,24 @@
 .sq-solvi-muted {
   color: #64748b;
 }
+.sq-solvi-checksum {
+  display: block;
+  margin-top: 8px;
+  font-family: Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
 .sq-solvi-hidden {
   display: none;
 }
 @media (max-width: 720px) {
   .sq-solvi-form,
-  .sq-solvi-kpis {
+  .sq-solvi-kpis,
+  .sq-solvi-meta {
     grid-template-columns: 1fr;
+  }
+  .sq-solvi-meta-wide {
+    grid-column: auto;
   }
   .sq-solvi-actions {
     justify-content: stretch;
@@ -183,6 +227,14 @@
   }
   .sq-solvi-title h1 {
     font-size: 26px;
+  }
+  .sq-solvi-table {
+    min-width: 0;
+  }
+  .sq-solvi-table th,
+  .sq-solvi-table td {
+    padding: 8px 10px;
+    overflow-wrap: anywhere;
   }
 }
 </style>
@@ -205,6 +257,28 @@
           <button id="sq-solvi-submit" class="sq-solvi-btn" type="submit">Preview</button>
           <button id="sq-solvi-verify" class="sq-solvi-btn sq-solvi-btn--verify" type="button">Verify Write</button>
         </div>
+        <div class="sq-solvi-meta">
+          <label>
+            <span>Flight timestamp</span>
+            <input id="sq-solvi-flight-timestamp" name="flight_timestamp" type="datetime-local">
+          </label>
+          <label>
+            <span>Sensor</span>
+            <input id="sq-solvi-sensor" name="sensor" type="text" placeholder="Solvi">
+          </label>
+          <label>
+            <span>Platform</span>
+            <input id="sq-solvi-platform" name="platform" type="text" placeholder="UAV">
+          </label>
+          <label>
+            <span>Processing</span>
+            <input id="sq-solvi-processing-version" name="processing_version" type="text" placeholder="Solvi export">
+          </label>
+          <label class="sq-solvi-meta-wide">
+            <span>Source ID</span>
+            <input id="sq-solvi-source-id" name="source_id" type="text" placeholder="Mission, flight, or archive reference">
+          </label>
+        </div>
       </form>
       <div id="sq-solvi-error" class="sq-solvi-error"></div>
       <div id="sq-solvi-verify-result" class="sq-solvi-verify sq-solvi-hidden"></div>
@@ -225,6 +299,37 @@
           <div class="sq-solvi-kpi"><b id="sq-solvi-buffers">0</b><span>Buffers dropped</span></div>
           <div class="sq-solvi-kpi"><b id="sq-solvi-date">-</b><span>Flight date</span></div>
         </div>
+        <span id="sq-solvi-checksum" class="sq-solvi-muted sq-solvi-checksum"></span>
+      </div>
+    </div>
+
+    <div id="sq-solvi-duplicate-panel" class="sq-solvi-panel sq-solvi-hidden">
+      <div class="sq-solvi-panel-head">
+        <h2>Duplicate Check</h2>
+        <span id="sq-solvi-duplicate-status" class="sq-solvi-status sq-solvi-status--matched">Clean</span>
+      </div>
+      <div class="sq-solvi-body">
+        <div class="sq-solvi-kpis">
+          <div class="sq-solvi-kpi"><b id="sq-solvi-dup-checked">0</b><span>Checked observations</span></div>
+          <div class="sq-solvi-kpi"><b id="sq-solvi-dup-existing">0</b><span>Existing timestamp hits</span></div>
+          <div class="sq-solvi-kpi"><b id="sq-solvi-dup-same">0</b><span>Same values</span></div>
+          <div class="sq-solvi-kpi"><b id="sq-solvi-dup-changed">0</b><span>Changed values</span></div>
+          <div class="sq-solvi-kpi"><b id="sq-solvi-dup-files">0</b><span>Matching file checksums</span></div>
+        </div>
+      </div>
+      <div id="sq-solvi-duplicate-examples" class="sq-solvi-body sq-solvi-table-wrap sq-solvi-hidden">
+        <table class="sq-solvi-table">
+          <thead>
+            <tr>
+              <th>Plot</th>
+              <th>Trait</th>
+              <th>Incoming</th>
+              <th>Existing</th>
+              <th>Phenotype ID</th>
+            </tr>
+          </thead>
+          <tbody id="sq-solvi-duplicate-body"></tbody>
+        </table>
       </div>
     </div>
 
@@ -290,6 +395,50 @@
       .removeClass('sq-solvi-hidden');
   }
 
+  function renderDuplicates(report) {
+    if (!report) {
+      jQuery('#sq-solvi-duplicate-panel').addClass('sq-solvi-hidden');
+      return;
+    }
+
+    var existing = report.existing_observation_count || 0;
+    var changed = report.changed_value_count || 0;
+    var fileDuplicates = report.file_duplicate_count || 0;
+    var isWarning = existing > 0 || fileDuplicates > 0;
+    jQuery('#sq-solvi-duplicate-panel').removeClass('sq-solvi-hidden');
+    jQuery('#sq-solvi-duplicate-status')
+      .toggleClass('sq-solvi-status--matched', !isWarning)
+      .toggleClass('sq-solvi-status--missing', isWarning)
+      .text(isWarning ? 'Needs review' : 'Clean');
+    jQuery('#sq-solvi-dup-checked').text(report.checked_observation_count || 0);
+    jQuery('#sq-solvi-dup-existing').text(existing);
+    jQuery('#sq-solvi-dup-same').text(report.same_value_count || 0);
+    jQuery('#sq-solvi-dup-changed').text(changed);
+    jQuery('#sq-solvi-dup-files').text(fileDuplicates);
+
+    var examples = report.examples || [];
+    if (!examples.length) {
+      jQuery('#sq-solvi-duplicate-examples').addClass('sq-solvi-hidden');
+      jQuery('#sq-solvi-duplicate-body').empty();
+      return;
+    }
+    var rows = examples.map(function(item) {
+      return '<tr><td>' + esc(item.unit) + '</td><td>' + esc(item.trait) + '</td><td>' + esc(item.incoming_value) + '</td><td>' + esc(item.existing_value) + '</td><td>' + esc(item.phenotype_id) + '</td></tr>';
+    }).join('');
+    jQuery('#sq-solvi-duplicate-body').html(rows);
+    jQuery('#sq-solvi-duplicate-examples').removeClass('sq-solvi-hidden');
+  }
+
+  function displayTimestamp(data) {
+    if (data.flight_timestamp_input) {
+      return data.flight_timestamp_input.replace('T', ' ');
+    }
+    if (data.flight_timestamp) {
+      return data.flight_timestamp.replace('T', ' ').replace(/[+-]\d{4}$/, '');
+    }
+    return data.flight_date || '-';
+  }
+
   function render(data) {
     jQuery('#sq-solvi-error').hide();
     jQuery('#sq-solvi-result').removeClass('sq-solvi-hidden');
@@ -298,7 +447,12 @@
     jQuery('#sq-solvi-vars').text(data.variable_count || 0);
     jQuery('#sq-solvi-obs').text(data.observation_count || 0);
     jQuery('#sq-solvi-buffers').text(data.dropped_buffers || 0);
-    jQuery('#sq-solvi-date').text(data.flight_date || '-');
+    jQuery('#sq-solvi-date').text(displayTimestamp(data));
+    jQuery('#sq-solvi-checksum').text(data.file_md5 ? 'MD5: ' + data.file_md5 : '');
+    if (data.flight_timestamp_input && !jQuery('#sq-solvi-flight-timestamp').val()) {
+      jQuery('#sq-solvi-flight-timestamp').val(data.flight_timestamp_input);
+    }
+    renderDuplicates(data.duplicates);
 
     var traits = data.variables || [];
     var traitHtml = traits.map(function(item) {
@@ -328,6 +482,12 @@
 
     var formData = new FormData();
     formData.append('solvi_csv_file', fileInput.files[0]);
+    ['flight_timestamp', 'sensor', 'platform', 'processing_version', 'source_id'].forEach(function(name) {
+      var field = document.querySelector('[name="' + name + '"]');
+      if (field && field.value) {
+        formData.append(name, field.value);
+      }
+    });
 
     jQuery(buttonSelector).prop('disabled', true).text(busyText);
     jQuery.ajax({
@@ -367,6 +527,9 @@
       var message = response.message || 'Breedbase write verification passed. No observations were stored.';
       if (response.warning) {
         message += ' Warning: ' + response.warning;
+      }
+      if (response.duplicates && response.duplicates.changed_value_count) {
+        message += ' Changed values need review before import.';
       }
       showVerify(message, !!response.warning);
     });

@@ -2,6 +2,7 @@ package SGN::Controller::SeedQuest::Solvi;
 
 use Moose;
 use namespace::autoclean;
+use Digest::MD5 qw(md5_hex);
 use JSON qw(encode_json);
 use URI::FromHash 'uri';
 use CXGN::Phenotypes::StorePhenotypes;
@@ -33,13 +34,13 @@ sub preview : Path('/ajax/seedquest/solvi/preview') Args(0) {
         $self->_json_response($c, { error => 'You must be logged in first!' });
     }
 
-    my ($parsed, $filename, $parse_error) = $self->_parse_upload($c);
+    my ($parsed, $upload_info, $parse_error) = $self->_parse_upload($c);
     if ($parse_error) {
         $self->_json_response($c, { error => $parse_error });
     }
 
     my $schema = $c->dbic_schema('Bio::Chado::Schema', 'sgn_chado');
-    my $summary = $self->_preview_summary($schema, $parsed, $filename);
+    my $summary = $self->_preview_summary($schema, $parsed, $upload_info);
     $self->_json_response($c, $summary);
 }
 
@@ -54,7 +55,7 @@ sub verify_write : Path('/ajax/seedquest/solvi/verify') Args(0) {
         $self->_json_response($c, { error => 'Solvi write verification requires submitter or curator privileges.' });
     }
 
-    my ($parsed, $filename, $parse_error) = $self->_parse_upload($c);
+    my ($parsed, $upload_info, $parse_error) = $self->_parse_upload($c, require_timestamp => 1);
     if ($parse_error) {
         $self->_json_response($c, { error => $parse_error });
     }
@@ -68,7 +69,7 @@ sub verify_write : Path('/ajax/seedquest/solvi/verify') Args(0) {
     my $operator = eval { $person->get_username() } || eval { $user->get_username() } || 'unknown';
     my $timestamp = $self->_metadata_timestamp();
     my %metadata = (
-        archived_file => $filename,
+        archived_file => $upload_info->{filename},
         archived_file_type => 'seedquest solvi csv verify-only',
         operator => $operator,
         date => $timestamp,
@@ -113,16 +114,26 @@ sub verify_write : Path('/ajax/seedquest/solvi/verify') Args(0) {
         $self->_json_response($c, { error => "Breedbase write verification failed: $verified_error" });
     }
 
-    my $summary = $self->_preview_summary($schema, $parsed, $filename);
+    my $duplicates = $self->_duplicate_report($schema, $parsed, $upload_info);
+    my $summary = $self->_preview_summary($schema, $parsed, $upload_info);
     $summary->{verified} = JSON::true;
+    $summary->{duplicates} = $duplicates;
     $summary->{message} = 'Breedbase write verification passed. No observations were stored.';
-    $summary->{warning} = $verified_warning || '';
+    my @warnings;
+    push @warnings, $verified_warning if $verified_warning;
+    if (($duplicates->{existing_observation_count} || 0) > 0) {
+        push @warnings, 'Existing observations were found for this flight timestamp.';
+    }
+    if (($duplicates->{file_duplicate_count} || 0) > 0) {
+        push @warnings, 'A file with the same checksum already exists in archived phenotype metadata.';
+    }
+    $summary->{warning} = join(' ', @warnings);
     $summary->{write_enabled} = JSON::false;
     $self->_json_response($c, $summary);
 }
 
 sub _parse_upload {
-    my ($self, $c) = @_;
+    my ($self, $c, %opts) = @_;
 
     my $upload = $c->req->upload('solvi_csv_file');
     unless ($upload) {
@@ -139,6 +150,7 @@ sub _parse_upload {
         return (undef, undef, 'Solvi CSV is too large. Maximum size is 10 MB.');
     }
 
+    my $file_md5 = $self->_file_md5($upload->tempname);
     my $trait_map = $c->config->{seedquest_solvi_trait_map} || {};
     my $parsed = SeedQuest::Solvi::Parser->new(trait_map => $trait_map)->parse_file(
         $upload->tempname,
@@ -149,11 +161,32 @@ sub _parse_upload {
         return (undef, undef, $parsed->{error});
     }
 
-    return ($parsed, $filename, undef);
+    my ($flight_timestamp, $flight_timestamp_input, $timestamp_error) = $self->_resolve_flight_timestamp(
+        $c->req->param('flight_timestamp'),
+        $parsed->{flight_date},
+        $opts{require_timestamp},
+    );
+    if ($timestamp_error) {
+        return (undef, undef, $timestamp_error);
+    }
+    $self->_apply_flight_timestamp($parsed, $flight_timestamp) if $flight_timestamp;
+
+    my $upload_info = {
+        filename => $filename,
+        file_md5 => $file_md5,
+        flight_timestamp => $flight_timestamp || '',
+        flight_timestamp_input => $flight_timestamp_input || '',
+        sensor => $self->_clean_text_param($c, 'sensor'),
+        platform => $self->_clean_text_param($c, 'platform'),
+        processing_version => $self->_clean_text_param($c, 'processing_version'),
+        source_id => $self->_clean_text_param($c, 'source_id'),
+    };
+
+    return ($parsed, $upload_info, undef);
 }
 
 sub _preview_summary {
-    my ($self, $schema, $parsed, $filename) = @_;
+    my ($self, $schema, $parsed, $upload_info) = @_;
 
     my @trait_status = map { $self->_trait_status($schema, $_) } @{ $parsed->{variables} || [] };
     my @preview_units;
@@ -178,8 +211,11 @@ sub _preview_summary {
 
     return {
         success => JSON::true,
-        filename => $filename,
+        filename => $upload_info->{filename},
+        file_md5 => $upload_info->{file_md5} || '',
         flight_date => $parsed->{flight_date} || '',
+        flight_timestamp => $upload_info->{flight_timestamp} || '',
+        flight_timestamp_input => $upload_info->{flight_timestamp_input} || '',
         unit_count => scalar(@{ $parsed->{units} || [] }),
         variable_count => scalar(@{ $parsed->{variables} || [] }),
         observation_count => $observation_count,
@@ -188,6 +224,139 @@ sub _preview_summary {
         preview_units => \@preview_units,
         write_enabled => JSON::false,
     };
+}
+
+sub _duplicate_report {
+    my ($self, $schema, $parsed, $upload_info) = @_;
+
+    my $timestamp = $self->_timestamp_without_timezone($upload_info->{flight_timestamp});
+    my $report = {
+        checked_observation_count => 0,
+        existing_observation_count => 0,
+        same_value_count => 0,
+        changed_value_count => 0,
+        file_duplicate_count => 0,
+        file_duplicates => [],
+        examples => [],
+        timestamp => $timestamp || '',
+        file_md5 => $upload_info->{file_md5} || '',
+    };
+    return $report unless $timestamp;
+
+    my $dbh = $schema->storage->dbh;
+    my %trait_id_by_name;
+    for my $trait (@{ $parsed->{variables} || [] }) {
+        my $row = eval { SGN::Model::Cvterm->get_cvterm_row_from_trait_name($schema, $trait) };
+        next unless $row;
+        $trait_id_by_name{$trait} = $row->cvterm_id;
+    }
+
+    my @units = @{ $parsed->{units} || [] };
+    my %stock_id_by_name;
+    if (@units) {
+        my $placeholders = join(',', ('?') x @units);
+        my $sth = $dbh->prepare("select stock_id, uniquename from stock where uniquename in ($placeholders)");
+        $sth->execute(@units);
+        while (my ($stock_id, $uniquename) = $sth->fetchrow_array) {
+            $stock_id_by_name{$uniquename} = $stock_id;
+        }
+    }
+
+    my @stock_ids = values %stock_id_by_name;
+    my @trait_ids = values %trait_id_by_name;
+    my %existing;
+    if (@stock_ids && @trait_ids) {
+        my $stock_placeholders = join(',', ('?') x @stock_ids);
+        my $trait_placeholders = join(',', ('?') x @trait_ids);
+        my $sql = qq{
+            select stock.stock_id,
+                   stock.uniquename,
+                   phenotype.cvalue_id,
+                   cvterm.name || '|' || db.name || ':' || dbxref.accession as trait_name,
+                   phenotype.value,
+                   phenotype.phenotype_id,
+                   phenotype.collect_date
+            from phenotype
+            join nd_experiment_phenotype using(phenotype_id)
+            join nd_experiment using(nd_experiment_id)
+            join nd_experiment_stock using(nd_experiment_id)
+            join stock using(stock_id)
+            join cvterm on phenotype.cvalue_id = cvterm.cvterm_id
+            join dbxref on cvterm.dbxref_id = dbxref.dbxref_id
+            join db on dbxref.db_id = db.db_id
+            where stock.stock_id in ($stock_placeholders)
+              and phenotype.cvalue_id in ($trait_placeholders)
+              and phenotype.collect_date = ?::timestamp
+        };
+        my $sth = $dbh->prepare($sql);
+        $sth->execute(@stock_ids, @trait_ids, $timestamp);
+        while (my ($stock_id, $stock_name, $trait_id, $trait_name, $value, $phenotype_id, $collect_date) = $sth->fetchrow_array) {
+            push @{ $existing{"$stock_id:$trait_id"} }, {
+                stock_name => $stock_name,
+                trait_name => $trait_name,
+                value => defined $value ? $value : '',
+                phenotype_id => $phenotype_id,
+                collect_date => "$collect_date",
+            };
+        }
+    }
+
+    for my $unit (@units) {
+        my $stock_id = $stock_id_by_name{$unit};
+        next unless $stock_id;
+        for my $trait (@{ $parsed->{variables} || [] }) {
+            my $trait_id = $trait_id_by_name{$trait};
+            next unless $trait_id;
+            my $observations = $parsed->{data}{$unit}{$trait} || [];
+            for my $observation (@$observations) {
+                next unless $observation;
+                my $incoming_value = $observation->[0];
+                next unless defined $incoming_value;
+                $report->{checked_observation_count}++;
+                my $matches = $existing{"$stock_id:$trait_id"} || [];
+                next unless @$matches;
+                $report->{existing_observation_count}++;
+                my $first = $matches->[0];
+                if ($self->_values_equal($incoming_value, $first->{value})) {
+                    $report->{same_value_count}++;
+                } else {
+                    $report->{changed_value_count}++;
+                }
+                if (@{ $report->{examples} } < 20) {
+                    push @{ $report->{examples} }, {
+                        unit => $unit,
+                        trait => $trait,
+                        incoming_value => "$incoming_value",
+                        existing_value => $first->{value},
+                        phenotype_id => $first->{phenotype_id},
+                    };
+                }
+            }
+        }
+    }
+
+    if ($upload_info->{file_md5}) {
+        my $sth = $dbh->prepare(
+            q{
+                select file_id, basename, dirname
+                from metadata.md_files
+                where md5checksum = ?
+                order by file_id desc
+                limit 10
+            }
+        );
+        $sth->execute($upload_info->{file_md5});
+        while (my ($file_id, $basename, $dirname) = $sth->fetchrow_array) {
+            $report->{file_duplicate_count}++;
+            push @{ $report->{file_duplicates} }, {
+                file_id => $file_id,
+                basename => $basename || '',
+                dirname => $dirname || '',
+            };
+        }
+    }
+
+    return $report;
 }
 
 sub _json_response {
@@ -232,6 +401,82 @@ sub _has_real_user {
     return 0 unless $person;
     my $sp_person_id = eval { $person->get_sp_person_id() };
     return defined $sp_person_id && $sp_person_id > 0 ? 1 : 0;
+}
+
+sub _file_md5 {
+    my ($self, $path) = @_;
+    return '' unless $path;
+    open(my $fh, '<', $path) or return '';
+    binmode($fh);
+    my $ctx = Digest::MD5->new;
+    $ctx->addfile($fh);
+    close $fh;
+    return $ctx->hexdigest;
+}
+
+sub _resolve_flight_timestamp {
+    my ($self, $submitted, $parsed_date, $required) = @_;
+
+    my $value = defined $submitted ? $submitted : '';
+    $value =~ s/^\s+|\s+$//g;
+    if (!$value && $parsed_date) {
+        $value = $parsed_date . 'T00:00';
+    }
+    if (!$value) {
+        return ('', '', $required ? 'Flight timestamp is required before write verification.' : undef);
+    }
+
+    if ($value =~ /^(\d{4})-(\d{2})-(\d{2})$/) {
+        return ("$1-$2-$3 00:00:00+0000", "$1-$2-$3" . 'T00:00', undef);
+    }
+    if ($value =~ /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?(?:Z|([+-]\d{2}:?\d{2}))?$/) {
+        my ($year, $month, $day, $hour, $minute, $second, $zone) = ($1, $2, $3, $4, $5, $6 || '00', $7 || '+0000');
+        $zone =~ s/://g;
+        return ("$year-$month-$day $hour:$minute:$second$zone", "$year-$month-$day" . "T$hour:$minute", undef);
+    }
+
+    return ('', '', 'Flight timestamp must be a date or date-time value.');
+}
+
+sub _apply_flight_timestamp {
+    my ($self, $parsed, $timestamp) = @_;
+    return unless $timestamp;
+    for my $unit (@{ $parsed->{units} || [] }) {
+        for my $trait (@{ $parsed->{variables} || [] }) {
+            my $observations = $parsed->{data}{$unit}{$trait} || [];
+            for my $observation (@$observations) {
+                next unless $observation;
+                $observation->[1] = $timestamp;
+            }
+        }
+    }
+}
+
+sub _timestamp_without_timezone {
+    my ($self, $timestamp) = @_;
+    return '' unless $timestamp;
+    $timestamp =~ s/T/ /;
+    $timestamp =~ s/(?:Z|[+-]\d{2}:?\d{2})$//;
+    $timestamp .= ':00' if $timestamp =~ /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/;
+    return $timestamp;
+}
+
+sub _clean_text_param {
+    my ($self, $c, $name) = @_;
+    my $value = $c->req->param($name) || '';
+    $value =~ s/^\s+|\s+$//g;
+    $value = substr($value, 0, 120);
+    return $value;
+}
+
+sub _values_equal {
+    my ($self, $left, $right) = @_;
+    $left = '' unless defined $left;
+    $right = '' unless defined $right;
+    if ($left =~ /^[+-]?(?:\d+(?:[.]\d*)?|[.]\d+)(?:[eE][+-]?\d+)?$/ && $right =~ /^[+-]?(?:\d+(?:[.]\d*)?|[.]\d+)(?:[eE][+-]?\d+)?$/) {
+        return abs($left - $right) < 0.0000001 ? 1 : 0;
+    }
+    return "$left" eq "$right" ? 1 : 0;
 }
 
 sub _can_verify_write {
