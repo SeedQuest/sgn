@@ -3,6 +3,9 @@ package SGN::Controller::SeedQuest::Solvi;
 use Moose;
 use namespace::autoclean;
 use Digest::MD5 qw(md5_hex);
+use File::Copy qw(copy);
+use File::Path qw(make_path);
+use File::Spec;
 use JSON qw(encode_json);
 use URI::FromHash 'uri';
 use CXGN::Phenotypes::StorePhenotypes;
@@ -60,51 +63,19 @@ sub verify_write : Path('/ajax/seedquest/solvi/verify') Args(0) {
         $self->_json_response($c, { error => $parse_error });
     }
 
-    my $schema = $c->dbic_schema('Bio::Chado::Schema', 'sgn_chado');
-    my $metadata_schema = $c->dbic_schema('CXGN::Metadata::Schema');
-    my $phenome_schema = $c->dbic_schema('CXGN::Phenome::Schema');
-    my $user = $c->user();
-    my $person = $user->get_object();
-    my $user_id = $person->get_sp_person_id();
-    my $operator = eval { $person->get_username() } || eval { $user->get_username() } || 'unknown';
-    my $timestamp = $self->_metadata_timestamp();
-    my %metadata = (
-        archived_file => $upload_info->{filename},
+    my ($store_context, $store_context_error) = $self->_store_context(
+        $c,
+        $parsed,
+        $upload_info,
         archived_file_type => 'seedquest solvi csv verify-only',
-        operator => $operator,
-        date => $timestamp,
     );
-
-    $c->tempfiles_subdir('/delete_nd_experiment_ids');
-    my $temp_file_nd_experiment_id = $c->config->{basepath} . '/' . $c->tempfile(
-        TEMPLATE => 'delete_nd_experiment_ids/fileXXXX'
-    );
-
-    my $store_phenotypes = CXGN::Phenotypes::StorePhenotypes->new(
-        basepath => $c->config->{basepath},
-        dbhost => $c->config->{dbhost},
-        dbname => $c->config->{dbname},
-        dbuser => $c->config->{dbuser},
-        dbpass => $c->config->{dbpass},
-        temp_file_nd_experiment_id => $temp_file_nd_experiment_id,
-        bcs_schema => $schema,
-        metadata_schema => $metadata_schema,
-        phenome_schema => $phenome_schema,
-        user_id => $user_id,
-        stock_list => $parsed->{units},
-        trait_list => $parsed->{variables},
-        values_hash => $parsed->{data},
-        has_timestamps => 1,
-        overwrite_values => 0,
-        remove_values => 0,
-        metadata_hash => \%metadata,
-        composable_validation_check_name => $c->config->{composable_validation_check_name},
-        allow_repeat_measures => $c->config->{allow_repeat_measures},
-    );
+    if ($store_context_error) {
+        $self->_json_response($c, { error => $store_context_error });
+    }
 
     my ($verified_warning, $verified_error);
     my $ok = eval {
-        ($verified_warning, $verified_error) = $store_phenotypes->verify();
+        ($verified_warning, $verified_error) = $store_context->{store_phenotypes}->verify();
         1;
     };
     if (!$ok) {
@@ -114,8 +85,8 @@ sub verify_write : Path('/ajax/seedquest/solvi/verify') Args(0) {
         $self->_json_response($c, { error => "Breedbase write verification failed: $verified_error" });
     }
 
-    my $duplicates = $self->_duplicate_report($schema, $parsed, $upload_info);
-    my $summary = $self->_preview_summary($schema, $parsed, $upload_info);
+    my $duplicates = $self->_duplicate_report($store_context->{schema}, $parsed, $upload_info);
+    my $summary = $self->_preview_summary($store_context->{schema}, $parsed, $upload_info);
     $summary->{verified} = JSON::true;
     $summary->{duplicates} = $duplicates;
     $summary->{message} = 'Breedbase write verification passed. No observations were stored.';
@@ -129,6 +100,117 @@ sub verify_write : Path('/ajax/seedquest/solvi/verify') Args(0) {
     }
     $summary->{warning} = join(' ', @warnings);
     $summary->{write_enabled} = JSON::false;
+    $self->_json_response($c, $summary);
+}
+
+sub import_data : Path('/ajax/seedquest/solvi/import') Args(0) {
+    my ($self, $c) = @_;
+
+    unless ($self->_has_real_user($c)) {
+        $self->_json_response($c, { error => 'You must be logged in first!' });
+    }
+
+    unless ($self->_can_verify_write($c)) {
+        $self->_json_response($c, { error => 'Solvi import requires submitter or curator privileges.' });
+    }
+
+    my ($parsed, $upload_info, $parse_error) = $self->_parse_upload($c, require_timestamp => 1);
+    if ($parse_error) {
+        $self->_json_response($c, { error => $parse_error });
+    }
+
+    my ($check_context, $check_context_error) = $self->_store_context(
+        $c,
+        $parsed,
+        $upload_info,
+        archived_file_type => 'seedquest solvi csv import check',
+    );
+    if ($check_context_error) {
+        $self->_json_response($c, { error => $check_context_error });
+    }
+
+    my ($verified_warning, $verified_error);
+    my $verified_ok = eval {
+        ($verified_warning, $verified_error) = $check_context->{store_phenotypes}->verify();
+        1;
+    };
+    if (!$verified_ok) {
+        $verified_error = $@ || 'Solvi import verification failed.';
+    }
+    if ($verified_error) {
+        $self->_json_response($c, { error => "Breedbase import verification failed: $verified_error" });
+    }
+
+    my $duplicates = $self->_duplicate_report($check_context->{schema}, $parsed, $upload_info);
+    my ($can_import, $import_blocker) = $self->_can_import_duplicate_report($duplicates);
+    my $summary = $self->_preview_summary($check_context->{schema}, $parsed, $upload_info);
+    $summary->{verified} = JSON::true;
+    $summary->{duplicates} = $duplicates;
+    $summary->{confirmation_required} = JSON::true;
+    $summary->{can_import} = $can_import ? JSON::true : JSON::false;
+    $summary->{write_enabled} = $can_import ? JSON::true : JSON::false;
+    $summary->{message} = $can_import
+        ? 'Solvi file is verified and ready for import. Confirm once more to store observations.'
+        : 'Solvi import is blocked until duplicate conflicts are resolved.';
+
+    my @warnings;
+    push @warnings, $verified_warning if $verified_warning;
+    push @warnings, $import_blocker if $import_blocker;
+    $summary->{warning} = join(' ', @warnings);
+
+    if (!$can_import || (($c->req->param('confirm_import') || '') ne '1')) {
+        $self->_json_response($c, $summary);
+    }
+
+    my ($archived_file, $archive_error) = $self->_archive_upload_file($c, $upload_info);
+    if ($archive_error) {
+        $self->_json_response($c, { error => $archive_error });
+    }
+
+    my ($store_context, $store_context_error) = $self->_store_context(
+        $c,
+        $parsed,
+        $upload_info,
+        archived_file => $archived_file,
+        archived_file_type => 'seedquest solvi csv import',
+    );
+    if ($store_context_error) {
+        $self->_json_response($c, { error => $store_context_error });
+    }
+
+    my ($store_warning, $store_error);
+    my $prestore_ok = eval {
+        ($store_warning, $store_error) = $store_context->{store_phenotypes}->verify();
+        1;
+    };
+    if (!$prestore_ok) {
+        $store_error = $@ || 'Solvi import verification failed before storing.';
+    }
+    if ($store_error) {
+        $self->_json_response($c, { error => "Breedbase import verification failed before storing: $store_error" });
+    }
+
+    my ($stored_error, $stored_success, $stored_details);
+    my $stored_ok = eval {
+        ($stored_error, $stored_success, $stored_details) = $store_context->{store_phenotypes}->store();
+        1;
+    };
+    if (!$stored_ok) {
+        $stored_error = $@ || 'Solvi import failed.';
+    }
+    if ($stored_error) {
+        $self->_json_response($c, { error => "Solvi import failed: $stored_error" });
+    }
+
+    $summary->{confirmation_required} = JSON::false;
+    $summary->{can_import} = JSON::false;
+    $summary->{write_enabled} = JSON::false;
+    $summary->{imported} = JSON::true;
+    $summary->{stored_observation_count} = scalar(@{ $stored_details || [] });
+    $summary->{archived_file} = $self->_safe_filename($upload_info->{filename});
+    $summary->{message} = $stored_success || 'Solvi observations were imported successfully.';
+    push @warnings, $store_warning if $store_warning;
+    $summary->{warning} = join(' ', grep { $_ } @warnings);
     $self->_json_response($c, $summary);
 }
 
@@ -173,6 +255,7 @@ sub _parse_upload {
 
     my $upload_info = {
         filename => $filename,
+        tempname => $upload->tempname,
         file_md5 => $file_md5,
         flight_timestamp => $flight_timestamp || '',
         flight_timestamp_input => $flight_timestamp_input || '',
@@ -224,6 +307,62 @@ sub _preview_summary {
         preview_units => \@preview_units,
         write_enabled => JSON::false,
     };
+}
+
+sub _store_context {
+    my ($self, $c, $parsed, $upload_info, %opts) = @_;
+
+    my $schema = $c->dbic_schema('Bio::Chado::Schema', 'sgn_chado');
+    my $metadata_schema = $c->dbic_schema('CXGN::Metadata::Schema');
+    my $phenome_schema = $c->dbic_schema('CXGN::Phenome::Schema');
+    my $user = $c->user();
+    my $person = $user->get_object();
+    my $user_id = $person->get_sp_person_id();
+    my $operator = eval { $person->get_username() } || eval { $user->get_username() } || 'unknown';
+    my $timestamp = $self->_metadata_timestamp();
+    my %metadata = (
+        archived_file => exists $opts{archived_file} ? $opts{archived_file} : $upload_info->{filename},
+        archived_file_type => $opts{archived_file_type} || 'seedquest solvi csv',
+        operator => $operator,
+        date => $timestamp,
+    );
+
+    $c->tempfiles_subdir('/delete_nd_experiment_ids');
+    my $temp_file_nd_experiment_id = $c->config->{basepath} . '/' . $c->tempfile(
+        TEMPLATE => 'delete_nd_experiment_ids/fileXXXX'
+    );
+
+    my $store_phenotypes = CXGN::Phenotypes::StorePhenotypes->new(
+        basepath => $c->config->{basepath},
+        dbhost => $c->config->{dbhost},
+        dbname => $c->config->{dbname},
+        dbuser => $c->config->{dbuser},
+        dbpass => $c->config->{dbpass},
+        temp_file_nd_experiment_id => $temp_file_nd_experiment_id,
+        bcs_schema => $schema,
+        metadata_schema => $metadata_schema,
+        phenome_schema => $phenome_schema,
+        user_id => $user_id,
+        stock_list => $parsed->{units},
+        trait_list => $parsed->{variables},
+        values_hash => $parsed->{data},
+        has_timestamps => 1,
+        overwrite_values => 0,
+        remove_values => 0,
+        metadata_hash => \%metadata,
+        composable_validation_check_name => $c->config->{composable_validation_check_name},
+        allow_repeat_measures => $c->config->{allow_repeat_measures},
+    );
+
+    return ({
+        schema => $schema,
+        metadata_schema => $metadata_schema,
+        phenome_schema => $phenome_schema,
+        store_phenotypes => $store_phenotypes,
+        metadata => \%metadata,
+        user_id => $user_id,
+        operator => $operator,
+    }, undef);
 }
 
 sub _duplicate_report {
@@ -359,6 +498,21 @@ sub _duplicate_report {
     return $report;
 }
 
+sub _can_import_duplicate_report {
+    my ($self, $report) = @_;
+    my @blocks;
+    if (($report->{changed_value_count} || 0) > 0) {
+        push @blocks, 'Changed-value duplicates were found for this flight timestamp.';
+    }
+    if (($report->{existing_observation_count} || 0) > 0) {
+        push @blocks, 'Existing observations were found for this flight timestamp.';
+    }
+    if (($report->{file_duplicate_count} || 0) > 0) {
+        push @blocks, 'A file with the same checksum already exists in archived phenotype metadata.';
+    }
+    return (!@blocks, join(' ', @blocks));
+}
+
 sub _json_response {
     my ($self, $c, $payload) = @_;
     $c->res->content_type('application/json');
@@ -412,6 +566,36 @@ sub _file_md5 {
     $ctx->addfile($fh);
     close $fh;
     return $ctx->hexdigest;
+}
+
+sub _archive_upload_file {
+    my ($self, $c, $upload_info) = @_;
+    my $source = $upload_info->{tempname};
+    return ('', 'Uploaded Solvi file is no longer available for archiving.') unless $source && -f $source;
+
+    my $archive_dir = File::Spec->catdir($c->config->{basepath}, 'seedquest_solvi_uploads');
+    eval { make_path($archive_dir) unless -d $archive_dir; };
+    if ($@) {
+        return ('', "Could not create Solvi archive directory: $@");
+    }
+
+    my $timestamp = $self->_metadata_timestamp();
+    $timestamp =~ s/[:]/-/g;
+    my $safe_filename = $self->_safe_filename($upload_info->{filename});
+    my $target = File::Spec->catfile($archive_dir, $timestamp . '-' . $safe_filename);
+    if (!copy($source, $target)) {
+        return ('', "Could not archive uploaded Solvi file: $!");
+    }
+    return ($target, undef);
+}
+
+sub _safe_filename {
+    my ($self, $filename) = @_;
+    $filename ||= 'solvi_upload.csv';
+    $filename =~ s/.*[\/\\]//;
+    $filename =~ s/[^A-Za-z0-9._-]+/_/g;
+    $filename =~ s/\A[._-]+//;
+    return $filename || 'solvi_upload.csv';
 }
 
 sub _resolve_flight_timestamp {

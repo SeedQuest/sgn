@@ -113,6 +113,12 @@
 .sq-solvi-btn--verify {
   background: #0f766e;
 }
+.sq-solvi-btn--import {
+  background: #b45309;
+}
+.sq-solvi-btn--danger {
+  background: #dc2626;
+}
 .sq-solvi-btn:disabled {
   opacity: .65;
 }
@@ -207,6 +213,26 @@
   font-size: 12px;
   overflow-wrap: anywhere;
 }
+.sq-solvi-confirm-text {
+  margin: 0 0 14px;
+  color: #334155;
+  line-height: 1.5;
+}
+.sq-solvi-confirm-check {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 14px 0;
+  color: #334155;
+  font-weight: 700;
+}
+.sq-solvi-confirm-check input {
+  margin-top: 3px;
+}
+.sq-solvi-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+}
 .sq-solvi-hidden {
   display: none;
 }
@@ -224,6 +250,9 @@
   }
   .sq-solvi-actions .sq-solvi-btn {
     flex: 1 1 0;
+  }
+  .sq-solvi-confirm-actions .sq-solvi-btn {
+    width: 100%;
   }
   .sq-solvi-title h1 {
     font-size: 26px;
@@ -256,6 +285,7 @@
         <div class="sq-solvi-actions">
           <button id="sq-solvi-submit" class="sq-solvi-btn" type="submit">Preview</button>
           <button id="sq-solvi-verify" class="sq-solvi-btn sq-solvi-btn--verify" type="button">Verify Write</button>
+          <button id="sq-solvi-import" class="sq-solvi-btn sq-solvi-btn--import" type="button">Import Data</button>
         </div>
         <div class="sq-solvi-meta">
           <label>
@@ -333,6 +363,23 @@
       </div>
     </div>
 
+    <div id="sq-solvi-import-panel" class="sq-solvi-panel sq-solvi-hidden">
+      <div class="sq-solvi-panel-head">
+        <h2>Import Confirmation</h2>
+        <span id="sq-solvi-import-status" class="sq-solvi-status sq-solvi-status--missing">Review</span>
+      </div>
+      <div class="sq-solvi-body">
+        <p id="sq-solvi-import-message" class="sq-solvi-confirm-text"></p>
+        <label class="sq-solvi-confirm-check">
+          <input id="sq-solvi-confirm-check" type="checkbox">
+          <span>I reviewed the flight timestamp, trait mapping, and duplicate report.</span>
+        </label>
+        <div class="sq-solvi-confirm-actions">
+          <button id="sq-solvi-confirm-import" class="sq-solvi-btn sq-solvi-btn--danger" type="button" disabled>Confirm Import</button>
+        </div>
+      </div>
+    </div>
+
     <div class="sq-solvi-panel">
       <div class="sq-solvi-panel-head">
         <h2>Trait Mapping</h2>
@@ -395,6 +442,35 @@
       .removeClass('sq-solvi-hidden');
   }
 
+  function hideImportPanel() {
+    jQuery('#sq-solvi-import-panel').addClass('sq-solvi-hidden');
+    jQuery('#sq-solvi-confirm-check').prop('checked', false);
+    jQuery('#sq-solvi-confirm-import').prop('disabled', true);
+  }
+
+  function renderImportPanel(data) {
+    if (!data || !data.confirmation_required) {
+      if (!data || !data.imported) {
+        hideImportPanel();
+      }
+      return;
+    }
+
+    var canImport = !!data.can_import;
+    var message = data.message || 'Review this import before storing observations.';
+    if (data.warning) {
+      message += ' ' + data.warning;
+    }
+    jQuery('#sq-solvi-import-panel').removeClass('sq-solvi-hidden');
+    jQuery('#sq-solvi-import-message').text(message);
+    jQuery('#sq-solvi-import-status')
+      .toggleClass('sq-solvi-status--matched', canImport)
+      .toggleClass('sq-solvi-status--missing', !canImport)
+      .text(canImport ? 'Ready' : 'Blocked');
+    jQuery('#sq-solvi-confirm-check').prop('checked', false).prop('disabled', !canImport);
+    jQuery('#sq-solvi-confirm-import').prop('disabled', true);
+  }
+
   function renderDuplicates(report) {
     if (!report) {
       jQuery('#sq-solvi-duplicate-panel').addClass('sq-solvi-hidden');
@@ -453,6 +529,7 @@
       jQuery('#sq-solvi-flight-timestamp').val(data.flight_timestamp_input);
     }
     renderDuplicates(data.duplicates);
+    renderImportPanel(data);
 
     var traits = data.variables || [];
     var traitHtml = traits.map(function(item) {
@@ -473,7 +550,7 @@
     jQuery('#sq-solvi-units-body').html(unitHtml);
   }
 
-  function uploadSolvi(endpoint, buttonSelector, busyText, doneText, onSuccess) {
+  function uploadSolvi(endpoint, buttonSelector, busyText, doneText, onSuccess, extraFields) {
     var fileInput = document.getElementById('sq-solvi-file');
     if (!fileInput.files.length) {
       showError('Choose a Solvi CSV file first.');
@@ -487,6 +564,10 @@
       if (field && field.value) {
         formData.append(name, field.value);
       }
+    });
+    extraFields = extraFields || {};
+    Object.keys(extraFields).forEach(function(name) {
+      formData.append(name, extraFields[name]);
     });
 
     jQuery(buttonSelector).prop('disabled', true).text(busyText);
@@ -516,6 +597,7 @@
 
   jQuery('#sq-solvi-form').on('submit', function(e) {
     e.preventDefault();
+    hideImportPanel();
     uploadSolvi('/ajax/seedquest/solvi/preview', '#sq-solvi-submit', 'Previewing...', 'Preview', function(response) {
       render(response);
     });
@@ -533,6 +615,37 @@
       }
       showVerify(message, !!response.warning);
     });
+  });
+
+  jQuery('#sq-solvi-import').on('click', function() {
+    uploadSolvi('/ajax/seedquest/solvi/import', '#sq-solvi-import', 'Checking...', 'Import Data', function(response) {
+      render(response);
+      var message = response.message || 'Review the import confirmation before storing observations.';
+      if (response.warning) {
+        message += ' Warning: ' + response.warning;
+      }
+      showVerify(message, !response.can_import || !!response.warning);
+    });
+  });
+
+  jQuery('#sq-solvi-confirm-check').on('change', function() {
+    jQuery('#sq-solvi-confirm-import').prop('disabled', !this.checked);
+  });
+
+  jQuery('#sq-solvi-confirm-import').on('click', function() {
+    if (!jQuery('#sq-solvi-confirm-check').prop('checked')) {
+      showError('Review confirmation is required before import.');
+      return;
+    }
+    uploadSolvi('/ajax/seedquest/solvi/import', '#sq-solvi-confirm-import', 'Importing...', 'Confirm Import', function(response) {
+      render(response);
+      hideImportPanel();
+      showVerify(response.message || 'Solvi observations were imported successfully.', !!response.warning);
+    }, { confirm_import: '1' });
+  });
+
+  jQuery('#sq-solvi-file, #sq-solvi-flight-timestamp').on('change input', function() {
+    hideImportPanel();
   });
 })();
 </script>
