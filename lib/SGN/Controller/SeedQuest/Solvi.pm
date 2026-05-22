@@ -5,6 +5,7 @@ use namespace::autoclean;
 use JSON qw(encode_json);
 use URI::FromHash 'uri';
 use SeedQuest::Solvi::Parser;
+use SGN::Model::Cvterm;
 
 BEGIN { extends 'Catalyst::Controller'; }
 
@@ -111,16 +112,18 @@ sub _trait_status {
 
     my $cvterm_id;
     my $match_name = '';
-    my $row = eval {
-        $schema->resultset('Cv::Cvterm')->search(
-            { 'me.name' => $trait_name },
-            { rows => 1 },
-        )->first;
-    };
+    my $row = eval { SGN::Model::Cvterm->get_cvterm_row_from_trait_name($schema, $trait_name) };
 
     if ($row) {
-        $cvterm_id = $row->cvterm_id;
-        $match_name = $row->name;
+        my $is_variable = $row->search_related(
+            'cvterm_relationship_subjects',
+            { 'type.name' => 'VARIABLE_OF' },
+            { join => 'type', rows => 1 },
+        )->count;
+        if ($is_variable) {
+            $cvterm_id = $row->cvterm_id;
+            $match_name = $trait_name;
+        }
     }
 
     return {

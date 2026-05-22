@@ -19,6 +19,27 @@ my %INDEX = (
     'HEIGHT' => 'Canopy height (cm)',
 );
 
+my %DEFAULT_TRAIT_MAP = (
+    'ndvi_mean'   => 'Canopy NDVI - mean|SQ:SOLVI_000001',
+    'ndvi_median' => 'Canopy NDVI - median|SQ:SOLVI_000002',
+    'ndvi_stdev'  => 'Canopy NDVI - stdev|SQ:SOLVI_000003',
+    'ndre_mean'   => 'Canopy NDRE - mean|SQ:SOLVI_000004',
+    'ndre_median' => 'Canopy NDRE - median|SQ:SOLVI_000005',
+    'ndre_stdev'  => 'Canopy NDRE - stdev|SQ:SOLVI_000006',
+    'osavi_mean'   => 'Canopy OSAVI - mean|SQ:SOLVI_000007',
+    'osavi_median' => 'Canopy OSAVI - median|SQ:SOLVI_000008',
+    'osavi_stdev'  => 'Canopy OSAVI - stdev|SQ:SOLVI_000009',
+    'grvi_mean'   => 'Canopy GRVI - mean|SQ:SOLVI_000010',
+    'grvi_median' => 'Canopy GRVI - median|SQ:SOLVI_000011',
+    'grvi_stdev'  => 'Canopy GRVI - stdev|SQ:SOLVI_000012',
+    'nir_mean'   => 'Canopy NIR reflectance - mean|SQ:SOLVI_000013',
+    'nir_median' => 'Canopy NIR reflectance - median|SQ:SOLVI_000014',
+    'nir_stdev'  => 'Canopy NIR reflectance - stdev|SQ:SOLVI_000015',
+    'height_mean'   => 'Canopy height (cm) - mean|SQ:SOLVI_000016',
+    'height_median' => 'Canopy height (cm) - median|SQ:SOLVI_000017',
+    'height_stdev'  => 'Canopy height (cm) - stdev|SQ:SOLVI_000018',
+);
+
 my %HOMOGLYPH = (
     "\x{0410}" => 'A', "\x{0412}" => 'B', "\x{0415}" => 'E',
     "\x{041A}" => 'K', "\x{041C}" => 'M', "\x{041D}" => 'H',
@@ -164,6 +185,7 @@ sub _trait_name {
     my ($self, $index, $stat) = @_;
     my $key = lc($index) . '_' . $stat;
     return $self->{trait_map}{$key} if $self->{trait_map}{$key};
+    return $DEFAULT_TRAIT_MAP{$key} if $DEFAULT_TRAIT_MAP{$key};
     return "$INDEX{$index} - $stat";
 }
 
