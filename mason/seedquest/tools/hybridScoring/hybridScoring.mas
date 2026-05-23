@@ -264,6 +264,11 @@ jQuery(document).ready(function() {
                 if (aVal === null && bVal === null) return 0;
                 if (aVal === null) return 1;
                 if (bVal === null) return -1;
+                if (col === 'name') {
+                    return sortDir[col]
+                        ? String(aVal).localeCompare(String(bVal))
+                        : String(bVal).localeCompare(String(aVal));
+                }
                 return sortDir[col] ? aVal - bVal : bVal - aVal;
             });
             jQuery.each(rows, function(i, r) { tbody.append(r); });
@@ -280,7 +285,8 @@ jQuery(document).ready(function() {
         var text = jQuery(row).find('td').eq(idx).text().replace('%', '').replace('+', '');
         if (text === 'N/A' || text === '—') return null;
         if (col === 'name') return text.toLowerCase();
-        return parseFloat(text) || 0;
+        var parsed = parseFloat(text);
+        return isNaN(parsed) ? null : parsed;
     }
 });
 </script>

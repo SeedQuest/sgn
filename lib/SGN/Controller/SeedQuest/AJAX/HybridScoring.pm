@@ -55,7 +55,8 @@ sub _do_calculate {
 
         # Fetch all phenotype data for this trial, excluding QC outliers
         my $sth = $dbh->prepare(q{
-            SELECT
+            SELECT DISTINCT
+                phenotype.phenotype_id,
                 s2.uniquename    AS accession,
                 cvterm.name      AS trait,
                 phenotype.value  AS val
@@ -68,7 +69,13 @@ sub _do_calculate {
                 ON nes.nd_experiment_id = nep.nd_experiment_id
             JOIN stock s ON s.stock_id = nes.stock_id
             JOIN stock_relationship sr ON sr.subject_id = nes.stock_id
+            JOIN cvterm srtype
+                ON srtype.cvterm_id = sr.type_id
+               AND srtype.name = 'plot_of'
             JOIN stock s2 ON s2.stock_id = sr.object_id
+            JOIN cvterm object_type
+                ON object_type.cvterm_id = s2.type_id
+               AND object_type.name = 'accession'
             JOIN cvterm ON phenotype.observable_id = cvterm.cvterm_id
             WHERE nep2.project_id = ?
               AND phenotype.value ~ '^[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?$'
@@ -85,7 +92,7 @@ sub _do_calculate {
 
         # Group data: trait -> accession -> [values]
         my %data;
-        while (my ($accession, $trait, $val) = $sth->fetchrow_array) {
+        while (my ($phenotype_id, $accession, $trait, $val) = $sth->fetchrow_array) {
             push @{$data{$trait}{$accession}}, $val + 0;
         }
 
@@ -112,10 +119,9 @@ sub _do_calculate {
 
             # Sort by trimmed_mean descending for top 2/3
             my @sorted = sort { $b->{trimmed_mean} <=> $a->{trimmed_mean} } @valid;
-            my $top_count = ceil(scalar(@sorted) * 2 / 3);
-            $top_count = 1 if $top_count < 1;
+            my $top_count = scalar(@sorted) ? ceil(scalar(@sorted) * 2 / 3) : 0;
 
-            my @top = @sorted[0 .. $top_count - 1];
+            my @top = $top_count ? @sorted[0 .. $top_count - 1] : ();
             my $trial_standard = scalar(@top) > 0
                 ? sum(map { $_->{trimmed_mean} } @top) / scalar(@top)
                 : 0;
@@ -237,11 +243,10 @@ sub export_GET {
     my $trial_name = $result->{trial_name};
     $trial_name =~ s/[^a-zA-Z0-9_()-]/_/g;
 
+    my %worksheet_names;
     for my $trait (sort keys %{$result->{traits}}) {
         my $tdata = $result->{traits}{$trait};
-        # Excel worksheet names cannot contain []:*?/\
-        (my $ws_name = $trait) =~ s/[\[\]:*?\/\\]/_/g;
-        $ws_name = substr($ws_name, 0, 31);
+        my $ws_name = _excel_worksheet_name($trait, \%worksheet_names);
         my $ws = $workbook->add_worksheet($ws_name);
         $ws->set_landscape();
 
@@ -302,6 +307,25 @@ sub export_GET {
     $c->res->content_type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     $c->res->header('Content-Disposition' => "attachment; filename=\"$filename\"");
     $c->res->body($data);
+}
+
+sub _excel_worksheet_name {
+    my ($trait, $seen) = @_;
+    my $name = defined $trait && $trait ne '' ? $trait : 'Trait';
+    $name =~ s/[\[\]:*?\/\\]/_/g;
+    $name =~ s/^\s+|\s+$//g;
+    $name = 'Trait' if $name eq '';
+
+    my $base = substr($name, 0, 31);
+    my $candidate = $base;
+    my $counter = 1;
+    while ($seen->{$candidate}) {
+        $counter++;
+        my $suffix = "_$counter";
+        $candidate = substr($base, 0, 31 - length($suffix)) . $suffix;
+    }
+    $seen->{$candidate} = 1;
+    return $candidate;
 }
 
 1;
