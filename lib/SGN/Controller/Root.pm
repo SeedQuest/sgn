@@ -325,8 +325,9 @@ sub auto : Private {
                 || ($c->req->headers->header('Accept') // '') =~ /json/i
                 || $path =~ m{^ajax/}i
             ) {
-                $c->stash->{rest} = { error => 'Login required' };
                 $c->res->status(401);
+                $c->res->content_type('application/json');
+                $c->res->body(JSON::XS->new->utf8->encode({ error => 'Login required' }));
                 $c->detach;
                 return 0;
             }
