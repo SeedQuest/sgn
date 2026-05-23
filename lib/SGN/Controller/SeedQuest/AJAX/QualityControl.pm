@@ -15,6 +15,7 @@ use CXGN::Dataset::File;
 use CXGN::Phenotypes::File;
 use CXGN::MixedModels;
 use SGN::Controller::AJAX::Dataset;
+use SGN::Model::Cvterm;
 use JSON;
 
 
@@ -81,6 +82,7 @@ sub prepare: Path('/ajax/seedquest/qualitycontrol/prepare') Args(0) {
     $c->tempfiles_subdir("qualitycontrol");
 
     my ($fh, $tempfile) = $c->tempfile(TEMPLATE=>"qualitycontrol/qc_XXXXX");
+    close($fh) if $fh;
 
     my $people_schema = $c->dbic_schema("CXGN::People::Schema");
     my $schema = $c->dbic_schema("Bio::Chado::Schema", "sgn_chado");
@@ -104,7 +106,7 @@ sub prepare: Path('/ajax/seedquest/qualitycontrol/prepare') Args(0) {
         my $trait_html ="";
 
         foreach my $trait (@$traits) {
-           if ($trait =~ m/.+\d{7}/){
+           if (defined $trait && $trait ne ''){
             my $safe_trait = $self->_html_escape($trait);
             $trait_html .= '<input type="checkbox" class="trait_box" name="'.$trait_options.'" value="'.$safe_trait.'">'.$safe_trait.'</input> </br>';
            }
@@ -132,7 +134,11 @@ sub prepare: Path('/ajax/seedquest/qualitycontrol/prepare') Args(0) {
 sub _parse_phenotype_file {
     my ($self, $c, $file_param, $trait) = @_;
 
+    return (undef, undef, "Missing data file.") unless defined $file_param && $file_param ne '';
+    return (undef, undef, "Missing trait.") unless defined $trait && $trait ne '';
+
     my $file = basename($file_param);
+    return (undef, undef, "Invalid data file.") if $file eq '' || $file =~ /^\./;
     my $temppath = File::Spec->catfile(
         $c->config->{basepath},
         "static/documents/tempfiles/qualitycontrol/" . $file
@@ -144,6 +150,10 @@ sub _parse_phenotype_file {
     }
 
     my $header = <$F>;
+    unless (defined $header) {
+        close($F);
+        return (undef, undef, "Data file is empty.");
+    }
     chomp($header);
     my @keys = split("\t", $header);
 
@@ -483,12 +493,15 @@ sub restore_outliers : Path('/ajax/seedquest/qualitycontrol/restoreoutliers') Ar
         return;
     }
 
-    # getting trait name — strip ontology suffix for LIKE matching
-    my $trait = $c->req->param('trait');
-    unless (defined $trait && $trait ne '') {
+    my $raw_trait = $c->req->param('trait');
+    unless (defined $raw_trait && $raw_trait ne '') {
         $c->stash->{rest} = { error => 'Missing trait.' };
         return;
     }
+    my $trait_cvterm_id = $self->_trait_cvterm_id($schema, $raw_trait);
+
+    # getting trait name — strip ontology suffix for validated_phenotype matching
+    my $trait = $raw_trait;
     $trait =~ s/\|.*//;
     my $trait_like = $trait . '%';
 
@@ -531,7 +544,22 @@ sub restore_outliers : Path('/ajax/seedquest/qualitycontrol/restoreoutliers') Ar
         )
     };
 
-    # Parameterized DELETE: remove phenotypeprop outlier marks
+    # Parameterized DELETE: remove only phenotype_outlier phenotypeprop marks.
+    # Do not delete unrelated phenotype properties for matching phenotypes.
+    my @trait_filter_params;
+    my $trait_filter_sql;
+    if ($trait_cvterm_id) {
+        $trait_filter_sql = 'ph.observable_id = ?';
+        @trait_filter_params = ($trait_cvterm_id);
+    } else {
+        $trait_filter_sql = q{
+            ph.observable_id IN (
+                SELECT cvterm_id FROM cvterm WHERE cvterm.name LIKE ?
+            )
+        };
+        @trait_filter_params = ($trait_like);
+    }
+
     my $outliers_clean_sql = qq{
         DELETE FROM phenotypeprop
         WHERE phenotypeprop.phenotype_id IN (
@@ -541,10 +569,11 @@ sub restore_outliers : Path('/ajax/seedquest/qualitycontrol/restoreoutliers') Ar
             JOIN nd_experiment_phenotype nep ON nep.phenotype_id = phenotypeprop.phenotype_id
             JOIN nd_experiment_project nes ON nes.nd_experiment_id = nep.nd_experiment_id
             JOIN project pr ON pr.project_id = nes.project_id
-            WHERE ph.observable_id IN (
-                SELECT cvterm_id FROM cvterm WHERE cvterm.name LIKE ?
-            )
+            WHERE $trait_filter_sql
             AND pr.name IN ($trial_placeholders)
+        )
+        AND phenotypeprop.type_id = (
+            SELECT cvterm_id FROM cvterm WHERE name = 'phenotype_outlier'
         )
     };
 
@@ -557,7 +586,7 @@ sub restore_outliers : Path('/ajax/seedquest/qualitycontrol/restoreoutliers') Ar
         $sth_trial->execute(@trial_list, $trait_like);
 
         my $sth_clean = $dbh->prepare($outliers_clean_sql);
-        $sth_clean->execute($trait_like, @trial_list);
+        $sth_clean->execute(@trait_filter_params, @trial_list);
 
         $dbh->commit;
         1;
