@@ -224,6 +224,10 @@ sub _do_gdd_calculation {
                 }
             }
 
+            unless ($weather_data && @$weather_data) {
+                die "No weather data available for location $location_id from $start_date to $end_date.";
+            }
+
             # Calculate GDD/CHU via shared helpers; skip days with missing temps
             # (do not fabricate 20/10) and track real mean temperature.
             my @daily_data;
@@ -390,6 +394,9 @@ sub _do_maturity {
             my $api = $self->_fetch_openmeteo_data($lat, $lon, $sowing_date, $end_date);
             $weather = $self->_parse_api_response($api, 'openmeteo');
             $self->_cache_weather_data($c, $location_id, $weather, 'openmeteo') if $weather && @$weather;
+        }
+        unless ($weather && @$weather) {
+            return { error => "No weather data available for location $location_id from $sowing_date to $end_date." };
         }
         my @days = sort { ($a->{date} // '') cmp ($b->{date} // '') } @{$weather || []};
 
@@ -706,7 +713,7 @@ sub _parse_api_response {
     elsif ($source eq 'davis') {
         my $sensors = $data->{sensors} || [];
         foreach my $sensor (@$sensors) {
-            next unless $sensor->{sensor_type} == 45; # ISS sensor
+            next unless defined $sensor->{sensor_type} && $sensor->{sensor_type} == 45; # ISS sensor
             foreach my $rec (@{$sensor->{data} || []}) {
                 my $tmax_f = defined $rec->{temp_hi} ? $rec->{temp_hi} : $rec->{temp_out_hi};
                 my $tmin_f = defined $rec->{temp_lo} ? $rec->{temp_lo} : $rec->{temp_out_lo};
@@ -729,11 +736,12 @@ sub _parse_api_response {
 
         for my $i (0..$#$temps) {
             my $t = $temps->[$i];
+            my $rain_row = $rain->[$i] || {};
             push @result, {
                 date => $t->{time},
                 tmax => $t->{high},
                 tmin => $t->{low},
-                precip => $rain->[$i]{value} // 0,
+                precip => $rain_row->{value} // 0,
             };
         }
     }
@@ -986,6 +994,11 @@ sub export_weather : Path('/ajax/seedquest/weather/export') Args(0) {
     while (my $row = $sth->fetchrow_hashref) {
         push @rows, $row;
     }
+    unless (@rows) {
+        $c->res->status(404);
+        $c->res->body("No weather data found for $loc_name from $start_date to $end_date.");
+        return;
+    }
 
     # Generate Excel file
     # Must pass path (not FH) to Excel::Writer::XLSX so data is
@@ -1040,7 +1053,7 @@ sub export_weather : Path('/ajax/seedquest/weather/export') Args(0) {
     foreach my $r (@rows) {
         my $tmax = $r->{temp_max};
         my $tmin = $r->{temp_min};
-        my $tavg = $r->{temp_mean} || (defined $tmax && defined $tmin ? ($tmax + $tmin) / 2 : undef);
+        my $tavg = defined $r->{temp_mean} ? $r->{temp_mean} : (defined $tmax && defined $tmin ? ($tmax + $tmin) / 2 : undef);
         my $precip = $r->{precipitation} || 0;
 
         # GDD/CHU via the shared helpers — identical maths to the on-screen
@@ -1084,16 +1097,18 @@ sub export_weather : Path('/ajax/seedquest/weather/export') Args(0) {
 
     my $summary_hdr = $workbook->add_format(bold => 1, border => 1, bg_color => '#ecf0f1');
     my $summary_val = $workbook->add_format(border => 1, num_format => '0.0', align => 'center');
+    my @tmax_values = grep { defined } map { $_->{temp_max} } @rows;
+    my @tmin_values = grep { defined } map { $_->{temp_min} } @rows;
 
     my @summary = (
         ['Total Days', scalar @rows],
         ['Total GDD (base ' . $base_temp . '°C)', $gdd_cum],
         ['Total CHU', $chu_cum],
         ['Total Precipitation (mm)', $precip_cum],
-        ['Avg Tmax (°C)', @rows ? (List::Util::sum(map { $_->{temp_max} // 0 } @rows) / @rows) : 0],
-        ['Avg Tmin (°C)', @rows ? (List::Util::sum(map { $_->{temp_min} // 0 } @rows) / @rows) : 0],
-        ['Max Tmax (°C)', @rows ? List::Util::max(map { $_->{temp_max} // 0 } @rows) : 0],
-        ['Min Tmin (°C)', @rows ? List::Util::min(map { $_->{temp_min} // 0 } @rows) : 0],
+        ['Avg Tmax (°C)', @tmax_values ? (sum(@tmax_values) / @tmax_values) : 0],
+        ['Avg Tmin (°C)', @tmin_values ? (sum(@tmin_values) / @tmin_values) : 0],
+        ['Max Tmax (°C)', @tmax_values ? max(@tmax_values) : 0],
+        ['Min Tmin (°C)', @tmin_values ? min(@tmin_values) : 0],
     );
 
     for my $i (0..$#summary) {
