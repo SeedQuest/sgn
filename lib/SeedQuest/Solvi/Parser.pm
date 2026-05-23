@@ -198,12 +198,31 @@ sub _date_from_filename {
         SEP => '09', OCT => '10', NOV => '11', DEC => '12',
     );
     if ($filename =~ /(\d{1,2})[_.-](JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[_.-](\d{4})/i) {
-        return sprintf('%04d-%s-%02d', $3, $months{uc($2)}, $1);
+        my ($day, $month, $year) = ($1, $months{uc($2)}, $3);
+        return '' unless $self->_valid_date($year, $month, $day);
+        return sprintf('%04d-%02d-%02d', $year, $month, $day);
     }
     if ($filename =~ /(\d{4})-(\d{2})-(\d{2})/) {
+        return '' unless $self->_valid_date($1, $2, $3);
         return "$1-$2-$3";
     }
     return '';
+}
+
+sub _valid_date {
+    my ($self, $year, $month, $day) = @_;
+    return 0 unless defined $year && defined $month && defined $day;
+    return 0 unless $year =~ /^\d{4}$/ && $month =~ /^\d{1,2}$/ && $day =~ /^\d{1,2}$/;
+    return 0 if $year < 1900 || $year > 2100 || $month < 1 || $month > 12 || $day < 1;
+    my @days_in_month = (31, $self->_is_leap_year($year) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31);
+    return $day <= $days_in_month[$month - 1] ? 1 : 0;
+}
+
+sub _is_leap_year {
+    my ($self, $year) = @_;
+    return 1 if $year % 400 == 0;
+    return 0 if $year % 100 == 0;
+    return $year % 4 == 0 ? 1 : 0;
 }
 
 sub _is_buffer {
@@ -226,7 +245,9 @@ sub _fold_homoglyphs {
 sub _trim {
     my ($self, $value) = @_;
     return undef unless defined $value;
+    $value =~ s/\A\x{FEFF}//;
     $value =~ s/^\s+|\s+$//g;
+    $value =~ s/\A\x{FEFF}//;
     return $value;
 }
 

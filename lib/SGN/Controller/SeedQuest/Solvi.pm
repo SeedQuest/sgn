@@ -612,15 +612,46 @@ sub _resolve_flight_timestamp {
     }
 
     if ($value =~ /^(\d{4})-(\d{2})-(\d{2})$/) {
+        return ('', '', 'Flight timestamp has an invalid calendar date.')
+            unless $self->_valid_date_parts($1, $2, $3);
         return ("$1-$2-$3 00:00:00+0000", "$1-$2-$3" . 'T00:00', undef);
     }
     if ($value =~ /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?(?:Z|([+-]\d{2}:?\d{2}))?$/) {
         my ($year, $month, $day, $hour, $minute, $second, $zone) = ($1, $2, $3, $4, $5, $6 || '00', $7 || '+0000');
+        return ('', '', 'Flight timestamp has an invalid calendar date.')
+            unless $self->_valid_date_parts($year, $month, $day);
+        return ('', '', 'Flight timestamp has an invalid time.')
+            unless $self->_valid_time_parts($hour, $minute, $second, $zone);
         $zone =~ s/://g;
         return ("$year-$month-$day $hour:$minute:$second$zone", "$year-$month-$day" . "T$hour:$minute", undef);
     }
 
     return ('', '', 'Flight timestamp must be a date or date-time value.');
+}
+
+sub _valid_date_parts {
+    my ($self, $year, $month, $day) = @_;
+    return 0 unless defined $year && defined $month && defined $day;
+    return 0 unless $year =~ /^\d{4}$/ && $month =~ /^\d{1,2}$/ && $day =~ /^\d{1,2}$/;
+    return 0 if $year < 1900 || $year > 2100 || $month < 1 || $month > 12 || $day < 1;
+    my @days_in_month = (31, $self->_is_leap_year($year) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31);
+    return $day <= $days_in_month[$month - 1] ? 1 : 0;
+}
+
+sub _valid_time_parts {
+    my ($self, $hour, $minute, $second, $zone) = @_;
+    return 0 unless defined $hour && defined $minute && defined $second;
+    return 0 unless $hour =~ /^\d{2}$/ && $minute =~ /^\d{2}$/ && $second =~ /^\d{2}$/;
+    return 0 if $hour > 23 || $minute > 59 || $second > 59;
+    return 1 unless defined $zone && $zone ne '';
+    return $zone =~ /^[+-](?:[01]\d|2[0-3]):?[0-5]\d$/ ? 1 : 0;
+}
+
+sub _is_leap_year {
+    my ($self, $year) = @_;
+    return 1 if $year % 400 == 0;
+    return 0 if $year % 100 == 0;
+    return $year % 4 == 0 ? 1 : 0;
 }
 
 sub _apply_flight_timestamp {
