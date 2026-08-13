@@ -33,6 +33,7 @@ use CXGN::Onto;
 use Data::Dumper;
 use JSON;
 use CXGN::Job;
+use Encode;
 use Cwd;
 
 use namespace::autoclean;
@@ -60,6 +61,7 @@ sub download_obo: Path('/ajax/onto/download_obo') Args(1) {
     my $dbname = $c->config->{dbname};
     my $dbuser = $c->config->{dbuser};
     my $dbpass = $c->config->{dbpass};
+    my $basepath = $c->config->{basepath};
 
     my $sp_person_id = $c->user() ? $c->user->get_object()->get_sp_person_id() : undef;
     my $schema = $c->dbic_schema("Bio::Chado::Schema", undef, $sp_person_id);
@@ -84,9 +86,13 @@ sub download_obo: Path('/ajax/onto/download_obo') Args(1) {
         $obo_downloader = CXGN::Job->new({
             people_schema => $people_schema, 
             schema => $schema,
+            dbhost => $dbhost,
+            dbname => $dbname,
+            dbuser => $dbuser,
+            dbpass => $dbpass,
+            basepath => $basepath,
             sp_person_id => $sp_person_id,
             cmd => $cmd,
-            finish_logfile => $c->config->{job_finish_log},
             name => "$db_name ontology download",
             job_type => 'download',
             submit_page => $c->req->path
@@ -126,7 +132,7 @@ sub compose_trait: Path('/ajax/onto/store_composed_term') Args(0) {
   #my @ids = $c->req->param("ids[]");
   #print STDERR "Ids array for composing in AJAX Onto = @ids\n";
 
-  my $new_trait_names = decode_json $c->req->param("new_trait_names");
+  my $new_trait_names = decode_json( encode("utf8", $c->req->param("new_trait_names")) );
   my $term_type = $c->req->param("type") ? $c->req->param("type") : 'trait';
   #print STDERR Dumper $new_trait_names;
   my $new_terms;
@@ -362,11 +368,12 @@ sub get_traits_from_component_categories: Path('/ajax/onto/get_traits_from_compo
   my @trait_ids = $c->req->param("trait_ids[]");
   my @tod_ids = $c->req->param("tod_ids[]");
   my @toy_ids = $c->req->param("toy_ids[]");
+  my @tiy_ids = $c->req->param("tiy_ids[]");
   my @gen_ids = $c->req->param("gen_ids[]");
   my @evt_ids = $c->req->param("evt_ids[]");
   my @meta_ids = $c->req->param("meta_ids[]");
 
-  print STDERR "Obj ids are @object_ids\n Attr ids are @attribute_ids\n Method ids are @method_ids\n unit ids are @unit_ids\n trait ids are @trait_ids\n tod ids are @tod_ids\n toy ids are @toy_ids\n gen ids are @gen_ids\n evt ids are @evt_ids\n metadata ids are @meta_ids\n";
+  print STDERR "Obj ids are @object_ids\n Attr ids are @attribute_ids\n Method ids are @method_ids\n unit ids are @unit_ids\n trait ids are @trait_ids\n tod ids are @tod_ids\n toy ids are @toy_ids\n tiy ids are @tiy_ids\n gen ids are @gen_ids\n evt ids are @evt_ids\n metadata ids are @meta_ids\n";
   my $schema = $c->dbic_schema('Bio::Chado::Schema', 'sgn_chado');
 
   my $traits = SGN::Model::Cvterm->get_traits_from_component_categories($schema, \@allowed_composed_cvs, $composable_cvterm_delimiter, $composable_cvterm_format, {
@@ -377,6 +384,7 @@ sub get_traits_from_component_categories: Path('/ajax/onto/get_traits_from_compo
       trait => \@trait_ids,
       tod => \@tod_ids,
       toy => \@toy_ids,
+      tiy => \@tiy_ids,
       gen => \@gen_ids,
       evt => \@evt_ids,
       meta => \@meta_ids,

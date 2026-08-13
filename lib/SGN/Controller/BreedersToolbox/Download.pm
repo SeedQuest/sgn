@@ -53,6 +53,7 @@ use CXGN::BreedersToolbox::Accessions;
 use CXGN::Cross;
 use Sort::Key::Natural qw(natkeysort);
 use Time::Piece;
+use Text::CSV qw(csv);
 
 
 sub breeder_download : Path('/breeders/download/') Args(0) {
@@ -249,7 +250,7 @@ sub download_phenotypes_action : Path('/breeders/trials/phenotype/download') Arg
     my $repetitive_measurements = $c->req->param("repetitive_measurements") || "average";
     my $timestamp_option = $c->req->param("timestamp") && $c->req->param("timestamp") ne 'null' ? $c->req->param("timestamp") : 0;
     my $exclude_phenotype_outlier = $c->req->param("exclude_phenotype_outlier") && $c->req->param("exclude_phenotype_outlier") ne 'null' && $c->req->param("exclude_phenotype_outlier") ne 'undefined' ? $c->req->param("exclude_phenotype_outlier") : 0;
-    my $include_pedigree_parents = $c->req->param('include_pedigree_parents');
+    my $include_pedigree_parents = $c->req->param("include_pedigree_parents") && $c->req->param("include_pedigree_parents") ne 'null' && $c->req->param("include_pedigree_parents") ne 'undefined' ? $c->req->param("include_pedigree_parents") : 0;
     my $include_intercrop_stocks = $c->req->param("intercrop") && $c->req->param("intercrop") ne 'null' && $c->req->param("intercrop") ne 'undefined' ? $c->req->param("intercrop") : 0;
     my $include_entry_numbers = $c->req->param("entry_numbers") && $c->req->param("entry_numbers") ne 'null' ? $c->req->param("entry_numbers") : 0;
     my $include_trait_synonyms = $c->req->param("trait_synonyms") && $c->req->param("trait_synonyms") ne 'null' ? $c->req->param("trait_synonyms") : 0;
@@ -261,11 +262,16 @@ sub download_phenotypes_action : Path('/breeders/trials/phenotype/download') Arg
     my $accession_list = $c->req->param("accession_list");
     my $plot_list = $c->req->param("plot_list");
     my $plant_list = $c->req->param("plant_list");
+    my $protocol_list = $c->req->param("protocol_list");
+    my $instance_list = $c->req->param("instance_list");
     my $trait_contains = $c->req->param("trait_contains");
     my $phenotype_min_value = $c->req->param("phenotype_min_value") && $c->req->param("phenotype_min_value") ne 'null' ? $c->req->param("phenotype_min_value") : "";
     my $phenotype_max_value = $c->req->param("phenotype_max_value") && $c->req->param("phenotype_max_value") ne 'null' ? $c->req->param("phenotype_max_value") : "";
     my $phenotype_start_date = $c->req->param("phenotype_start_date");
     my $phenotype_end_date = $c->req->param("phenotype_end_date");
+    my $data_type = $c->req->param("data_type");
+    my $hdp_type = $c->req->param("hdp_type");
+    print STDERR "hdp type test: $hdp_type";
 
     my @trait_list;
     if ($trait_list && $trait_list ne 'null') {
@@ -311,6 +317,16 @@ sub download_phenotypes_action : Path('/breeders/trials/phenotype/download') Arg
     if ($plant_list && $plant_list ne 'null') {
 	print STDERR "plant list: ".Dumper $plant_list."\n";
 	@plant_list = @{_parse_list_from_json($plant_list)};
+    }
+    my @protocol_list;
+    if ($protocol_list && $protocol_list ne 'null') {
+    print STDERR "protocol list: ".Dumper $protocol_list."\n";
+    @protocol_list = @{_parse_list_from_json($protocol_list)};
+    }
+    my @instance_list;
+    if ($instance_list && $instance_list ne 'null') {
+    print STDERR "instance list: ".Dumper $instance_list."\n";
+    @instance_list = @{_parse_list_from_json($instance_list)};
     }
 
     #Input list arguments can be arrays of integer ids or strings; however, when fed to CXGN::Trial::Download, they must be arrayrefs of integer ids
@@ -403,7 +419,30 @@ sub download_phenotypes_action : Path('/breeders/trials/phenotype/download') Arg
         }
     }
 
-    my $plugin = $format eq 'xlsx' ? "TrialPhenotypeExcel" : "TrialPhenotypeCSV";
+    my @protocol_list_int;
+    foreach (@protocol_list) {
+        if ($_ =~ m/^\d+$/) {
+            push @protocol_list_int, $_;
+        } else {
+            my $q = "SELECT nd_protocol.nd_protocol_id FROM nd_protocol AND nd_protocol.name = ?;";
+            my $h = $schema->storage->dbh()->prepare($q);
+            $h->execute($_);
+            my ($protocol_id) = $h->fetchrow_array();
+
+            if ($protocol_id) {
+                push @protocol_list_int, $protocol_id;
+            }
+        }
+    }
+
+    my $plugin;
+    if ($data_type && $data_type eq 'high_dimensional') {
+        $plugin = $format eq 'xlsx' ? "TrialHighDimensionalPhenotypeExcel" : "TrialHighDimensionalPhenotypeCSV";
+        $data_level = 'all';
+    } else {
+        $plugin = $format eq 'xlsx' ? "TrialPhenotypeExcel" : "TrialPhenotypeCSV";
+    }
+
     my $temp_file_name;
     my $download_file_name;
     my $dir = $c->tempfiles_subdir('download');
@@ -431,6 +470,9 @@ sub download_phenotypes_action : Path('/breeders/trials/phenotype/download') Arg
         accession_list => \@accession_list_int,
         plot_list => \@plot_list_int,
         plant_list => \@plant_list_int,
+        protocol_list => \@protocol_list_int,
+        hdp_type => $hdp_type,
+        instance_list => \@instance_list,
         filename => $tempfile,
         format => $plugin,
         data_level => $data_level,
@@ -536,6 +578,7 @@ sub download_action : Path('/breeders/download_action') Args(0) {
     my $include_entry_numbers = $c->req->param("entry_numbers") || 0;
     my $include_trait_synonyms = $c->req->param("trait_synonyms") || 0;
     my $timestamp_included = $c->req->param("timestamp") || 0;
+    my $include_pedigree_parents = $c->req->param("pedigrees") || 0;
 
     # parameters for outliers download
     my @trait_ids     = split(',', $c->req->param("trait_ids_list"));
@@ -652,6 +695,7 @@ sub download_action : Path('/breeders/download_action') Args(0) {
             include_entry_numbers=>$include_entry_numbers,
             include_trait_synonyms=>$include_trait_synonyms,
     		data_level=>$datalevel,
+            include_pedigree_parents=>$include_pedigree_parents,
     	);
     	@data = $phenotypes_search->get_phenotype_matrix();
     }
@@ -796,9 +840,8 @@ sub download_accession_properties_action : Path('/breeders/download_accession_pr
     my ($tempfile, $uri) = $c->tempfile(TEMPLATE => "download_accessions_XXXXX", UNLINK=> 0);
 
     # Build Accession Info
-    my @editable_stock_props = split ',', $c->config->{editable_stock_props};
-
-    my $rows = $self->build_accession_properties_info($dbh, \@accession_ids, \@editable_stock_props);
+    my $BTAccessions = CXGN::BreedersToolbox::Accessions->new({ schema => $schema });
+    my $rows = $BTAccessions->export_properties($c, \@accession_ids);
 
     # Create and Return XLS and XLSX  file
     if ( $file_format eq ".xlsx" ) {
@@ -831,28 +874,7 @@ sub download_accession_properties_action : Path('/breeders/download_accession_pr
         my $file_name = basename($file_path);
 
         # Write to csv file
-        ## no critic (RequireBriefOpen)
-        open(my $csv_fh, "> :encoding(UTF-8)", $file_path) || die "Can't open file $file_path\n";
-        my @header =  @{$rows->[0]};
-        my $num_col = scalar(@header);
-
-        for ( my $line = 0; $line <= $#$rows; $line++ ) {
-            my $columns = $rows->[$line];
-            my $step = 1;
-            for ( my $i = 0; $i < $num_col; $i++ ) {
-                if ($columns->[$i]) {
-                    print $csv_fh "\"$columns->[$i]\"";
-                } else {
-                    print $csv_fh "\"\"";
-                }
-                if ($step < $num_col) {
-                    print $csv_fh ",";
-                }
-                $step++;
-            }
-            print $csv_fh "\n";
-        }
-        close $csv_fh;
+        csv(in => $rows, out => $file_path, sep_char => ",");
 
         # Return the csv file
         $c->res->content_type('text/csv');
@@ -871,81 +893,6 @@ sub download_accession_properties_action : Path('/breeders/download_accession_pr
         $c->res->body($output);
     }
 
-}
-
-#
-# Build Accession Properties Info
-#
-# Generate the rows in the accession info table for the specified Accessions
-#
-# Usage: my $rows = $self->build_accession_properties_info($dbh, \@accession_ids, \@editable_stock_props);
-# Returns: an arrayref where each array item is an array of accession properties
-#          the first item is an array of the header values
-#
-sub build_accession_properties_info {
-    my $self = shift;
-    my $dbh = shift;
-    my $accession_ids = shift;
-    my $editable_stock_props = shift;
-
-    # Setup Stock Props
-    my @stock_props = ("organization", "stock_synonym", "PUI");
-    foreach my $esp (@$editable_stock_props) {
-        if (!scalar grep { $_ eq $esp } @stock_props) {
-            push(@stock_props, $esp)
-        }
-    }
-
-    # Build Header
-    my @accession_headers = ("accession_name", "create_date", "species_name", "population_name");
-    push(@accession_headers, @stock_props);
-
-    # Add Header to Rows
-    my @accession_rows = ();
-    push(@accession_rows, \@accession_headers);
-
-    # Start query blocks
-    my $select = "SELECT stock.uniquename AS accession_name, stock.create_date AS create_date, organism.species AS species_name, string_agg(distinct(rs.uniquename), ', ') AS population_name";
-    my $from = "FROM public.stock";
-    my $joins = "LEFT JOIN public.organism USING (organism_id)";
-    $joins .= " LEFT JOIN public.stock_relationship ON (stock.stock_id = stock_relationship.subject_id AND stock_relationship.type_id = (SELECT cvterm_id FROM cvterm WHERE name = 'member_of' AND cv_id = (SELECT cv_id FROM cv WHERE name = 'stock_relationship')))";
-    $joins .= " LEFT JOIN public.stock AS rs ON (stock_relationship.object_id = rs.stock_id)";
-    my $group = "GROUP BY stock.stock_id, organism.species";
-    my $order = "ORDER BY stock.uniquename ASC;";
-    my @params;
-
-    # Add each of the stock props
-    my $count = 0;
-    foreach my $sp (@stock_props) {
-        $count++;
-        my $table = "sp" . $count;
-        $select .= ", string_agg(distinct($table.value), ', ') AS \"$sp\"";
-        $joins .= " LEFT JOIN public.stockprop AS $table ON (stock.stock_id = $table.stock_id AND $table.type_id = (SELECT cvterm_id FROM cvterm WHERE name = '$sp' AND cv_id = (SELECT cv_id FROM cv WHERE name = 'stock_property')))";
-    }
-
-    # Build where block using accession ids
-    my $where = "WHERE stock.stock_id IN (" . join(',', ('?') x @$accession_ids) . ")";
-    push(@params, @$accession_ids);
-
-    # Put query together
-    my $q = "$select $from $joins $where $group $order";
-
-    #print STDERR "QUERY = $q\n";
-
-    # Execute the query and add results to accession rows
-    my $h = $dbh->prepare($q);
-    $h->execute(@params);
-    while (my @results = $h->fetchrow_array()) {
-        # print STDERR "RETRIEVED: ".join(",", @results)."\n";
-        my $original_date_format = $results[1];
-        my $create_date = Time::Piece->strptime($original_date_format, "%Y-%m-%d %H:%M:%S");
-        my $download_date_format = $create_date->strftime("%Y-%B-%d");
-
-        splice(@results,1,1,$download_date_format);
-        push(@accession_rows, \@results);
-    }
-
-    return \@accession_rows;
 }
 
 # accession properties download -- end
